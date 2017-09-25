@@ -1,0 +1,643 @@
+<link href="css/jobmanager.css" rel="stylesheet" type="text/css" />
+<link href="css/dialogform.css" rel="stylesheet" type="text/css" />
+<script src="js/JobManagerProxy.js" type="text/javascript"></script>
+<script src="js/JobProxy.js" type="text/javascript"></script>
+
+<script>
+    /* initialize this form
+    */
+    function initJobManagerForm() {
+        initCreateJobDialog();
+        initAcknowledgeCloseDialog();
+        initJobRowSelect();
+        initJobTableSort();
+    }
+    /* initialize placeholder acknowledge close job dialog 
+    */
+    function initAcknowledgeCloseDialog() {
+        $("#dialog-acknowledgeclose").dialog({
+            resizable: false,
+            dialogClass: "no-close",
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+    }
+    function openAcknowledgeClose() {
+        $("#dialog-acknowledgeclose").dialog("open");
+    }
+    function cancelAcknowledge() {
+        // close dialog
+        $("#dialog-acknowledgeclose").dialog("close");
+    }
+    /* initialize placeholder jquery dialog 
+    */
+    function initCreateJobDialog() {
+        $("#dialog-createjob").dialog({
+            resizable: false,
+            dialogClass: "no-close",
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+        $("#job-name").on('input', resetJobErrorField);
+        $("#job-number").on('input', resetJobErrorField);
+        $("#job-nickname").on('input', resetJobErrorField);
+        $("#tubedata").on('click', resetJobErrorField);
+        $("#videodata").on('click', resetJobErrorField);
+        $("#origindata").on('click', resetJobErrorField);
+
+        // The job nickname will get auto-set to the first 4 non-whitespace characters
+        // of the job name.  So set a handler to detect changes to the job name field.
+        $("#job-name").on('change keyup', function() { $("#job-nickname").val($("#job-name").val().replace(/ /g,'').substring(0, 4).toUpperCase());});
+
+        const idaxOffices = ["WA", "CA", "CO", "ME", "OT"];
+
+        officeOptions = "";
+
+        for (var i = 0; i < idaxOffices.length; ++i) {
+            officeOptions += "<option value='" + i + "'>" + idaxOffices[i] + "</option>";
+        }
+
+        $("#office-dropdown").html(officeOptions);
+    }
+    /* initialize rowSelect function to recognize when a user clicks a row
+    */
+    function initJobRowSelect() {
+        $('#jobstablerows tbody tr').click(function() {
+            var tr = $(this).closest('tr');
+            var jobid = $(tr).find('td').eq(0).attr("id");
+            var jobnumber = $(tr).find('td').eq(0).text();
+            var jobname = $(tr).find('td').eq(1).text();
+            var jobnickname = $(tr).find('td').eq(2).text();
+            var joboffice = $(tr).find('td').eq(3).text();
+            var jobstudytype = $(tr).find('td').eq(4).attr("studytype");
+
+            // set current job and highlight selection
+            setCurrentJob (jobid, jobnumber, jobname, jobnickname, joboffice, jobstudytype);
+        });
+    }
+
+    function findJobRow(jobId)
+    {
+        var table = document.getElementById("jobstablerows");
+
+        for (var i = 0; i<table.rows.length; i++) {
+            var row = table.rows[i];
+            var cell = row.cells[0];
+            var cellid = cell.getAttribute("id");
+
+            if (cellid == jobId) {
+                return row;
+            }
+        }
+
+        return null;
+    }
+
+    /* function sets the page's Current Job to reflect the selected row in the table
+    */
+    function setCurrentJob(jobId, jobNumber, jobName, jobNickname, jobOffice, jobStudyType)
+    {
+        createCookie("currentjobid", jobId, 0);
+        createCookie("currentjobnumber", jobNumber, 0);
+        createCookie("currentjobname", jobName, 0);
+        createCookie("currentjobnickname", jobNickname, 0);
+        createCookie("currentjoboffice", jobOffice, 0);
+        createCookie("currentjobstudytype", jobStudyType, 0);
+
+        // enable buttons that act on a selected job
+        document.getElementById('processdatabtn').disabled = false;
+        document.getElementById('closejobbtn').disabled = false;
+        document.getElementById('editjobbtn').disabled = false;
+
+        // set currentjob fields on jobManager
+        document.getElementById("jobnumber").innerHTML = jobNumber+" - "+jobName;
+
+        // highlight selected row and unhighlight previous selected row
+        var table = document.getElementById("jobstablerows");
+        for (var i = 0; i<table.rows.length; i++)
+        {
+            var row = table.rows[i];
+            var cell = row.cells[0];
+            var cellid = cell.getAttribute("id");
+            var issel = cell.getAttribute("data-selected");
+
+            // if not a match
+            if (cellid != jobId)
+            {
+                row.style.color = "#000000";
+                row.style.backgroundColor = "";
+                cell.setAttribute("data-selected", false);
+            }
+            else
+            {
+                row.style.backgroundColor = "#0065ca";
+                row.style.color = "#ffffff";
+                cell.setAttribute("data-selected", true);
+            }
+        }
+    }
+
+    /* clear the current job
+    */
+    function clearCurrentJob()
+    {
+        var jobId = readCookie("currentjobid");
+
+        // erase currentjob cookies
+        eraseCookie("currentjobid");
+        eraseCookie("currentjobnumber");
+        eraseCookie("currentjoboffice");
+        eraseCookie("currentjobname");
+        eraseCookie("currentjobnickname");
+        eraseCookie("currentjobstudytype");
+        
+        // reset current job header
+        document.getElementById("jobnumber").innerHTML = "Select or create a new job";
+        document.getElementById('processdatabtn').disabled = true;
+        document.getElementById('closejobbtn').disabled = true;
+        document.getElementById('editjobbtn').disabled = true;
+        
+        // remove selected row from table
+        var table = document.getElementById('jobstablerows');
+
+        row = findJobRow(jobId);
+
+        if (row !== null)
+        {
+            table.deleteRow(row.rowIndex);
+        }
+    }
+    /* open createNewJob dialog
+    */
+    function createNewJob() {
+        document.getElementById('job-createheader').innerHTML = "Create New Job";
+
+        $("#job-name").val("");
+        $("#job-number").val("");
+        $("#job-nickname").val("");
+        document.getElementById('tubedata').checked = true;
+
+        resetJobErrorField();
+
+        createCookie("job-dialogmode", "create", 0);
+
+        $("#dialog-createjob").dialog("open");
+    }
+
+    /* open createNewJob dialog
+    */
+    function editJob()
+    {
+        createCookie("job-dialogmode", "edit", 0);
+
+        document.getElementById('job-createheader').innerHTML = "Edit Job";
+
+        var jobId = readCookie("currentjobid");
+
+        var jobname = readCookie("currentjobname");
+        $("#job-name").val(jobname);
+
+        var joboffice = readCookie("currentjoboffice");
+        document.getElementById("office-dropdown").selectedIndex = ["WA", "CA", "CO", "ME", "OT"].indexOf(joboffice);
+
+        var jobnumber = readCookie("currentjobnumber");
+        $("#job-number").val(jobnumber);
+
+        var jobnickname = readCookie("currentjobnickname");
+        $("#job-nickname").val(jobnickname);
+
+        var jobStudyType = readCookie("currentjobstudytype");
+
+        if (jobStudyType == STUDY_TYPE_ROADWAY) {
+            document.getElementById('tubedata').checked = true;
+        }
+        else if (jobStudyType == STUDY_TYPE_TMC) {
+            document.getElementById('videodata').checked = true;
+        }
+        else if (jobStudyType == STUDY_TYPE_ORIGINDESTINATION) {
+            document.getElementById('origindata').checked = true;
+        }
+        else if (jobStudyType == STUDY_TYPE_ADT) {
+            document.getElementById('adtdata').checked = true;
+        }
+
+        // Disable the submit button.  Keep it disabled until the user changes any of the inputs.
+        document.getElementById('job-submitbtn').disabled = true;
+
+        enableSubmitOnChange = function() {
+            var officeDropdown = document.getElementById("office-dropdown");
+            var newjoboffice = officeDropdown.options[officeDropdown.selectedIndex].innerHTML;
+
+            var newjobstudytype = "";
+
+            if (document.getElementById('videodata').checked === true) {
+                newjobstudytype = STUDY_TYPE_TMC;
+            } else if (document.getElementById('tubedata').checked === true) {
+                newjobstudytype = STUDY_TYPE_ROADWAY;
+            } else if (document.getElementById('origindata').checked === true) {
+                newjobstudytype = STUDY_TYPE_ORIGINDESTINATION;
+            } else if (document.getElementById('adtdata').checked === true) {
+                newjobstudytype = STUDY_TYPE_ADT;
+            }
+
+            if (($("#job-name").val() !== jobname)
+                    || ($("#job-number").val() !== jobnumber)
+                    || (newjoboffice !== joboffice)
+                    || ($("#job-nickname").val() !== jobnickname)
+                    || (newjobstudytype !== jobStudyType))
+            {
+                document.getElementById('job-submitbtn').disabled = false;
+            }
+            else
+            {
+                document.getElementById('job-submitbtn').disabled = true;
+            }
+        };
+
+        $("#job-name").on('change keyup', enableSubmitOnChange);
+        $("#job-number").on('change keyup', enableSubmitOnChange);
+        $("#job-nickname").on('change keyup', enableSubmitOnChange);
+        $("#office-dropdown").on('change', enableSubmitOnChange);
+        $("#videodata").on('click', enableSubmitOnChange);
+        $("#tubedata").on('click', enableSubmitOnChange);
+        $("#origindata").on('click', enableSubmitOnChange);
+        $("#adtdata").on('click', enableSubmitOnChange);
+
+        resetJobErrorField();
+
+        $("#dialog-createjob").dialog("open");
+    }
+    /* cancel createNewJob dialog
+    */
+    function cancelDialog()
+    {
+        // close dialog
+        $("#dialog-createjob").dialog("close");
+        return true;
+    }
+
+    /* validate inputs, and if valid post createNewJob inputs
+    */
+    function validInputs()
+    {
+        var errorfield = document.getElementById('job-errorfield');
+
+        // check for valid input fields
+        var jobnumber = document.getElementById('job-number').value;
+        var jobname = document.getElementById('job-name').value;
+
+        if (typeof jobname === 'undefined' || jobname === null || jobname === ""
+                || typeof jobnumber === 'undefined' || jobnumber === null || jobnumber === "")
+        {
+            errorfield.style.color = "#b5535f";
+            errorfield.innerHTML = "Error: job name, and number are required fields";
+            return false;
+        }
+        // valid inputs, proceed with call to server
+        else
+        {
+            var jobnickname = document.getElementById('job-nickname').value;
+            var jobstudytype = "";
+
+            if (document.getElementById('videodata').checked === true) {
+                jobstudytype = STUDY_TYPE_TMC;
+            } else if (document.getElementById('tubedata').checked === true) {
+                jobstudytype = STUDY_TYPE_ROADWAY;
+            } else if (document.getElementById('origindata').checked === true) {
+                jobstudytype = STUDY_TYPE_ORIGINDESTINATION;
+            } else if (document.getElementById('adtdata').checked === true) {
+                jobstudytype = STUDY_TYPE_ADT;
+            }
+
+            var officeDropdown = document.getElementById("office-dropdown");
+            var joboffice = officeDropdown.options[officeDropdown.selectedIndex].innerHTML;
+
+            var dialogMode = readCookie("job-dialogmode");
+            eraseCookie("job-dialogmode");
+
+            if (dialogMode == "create") {
+                JobManagerCreateJob(
+                        jobnumber,
+                        jobname,
+                        jobnickname,
+                        jobstudytype,
+                        joboffice,
+                        null,  //area
+                        null,  //notes
+                        null,  //orderdate
+                        null,  //deliverydate
+                        function(context, status, response, resultString, jobid) {
+                            if (response == "success") {
+                                // add new job row to table
+                                var currentDate = Date();
+                                currentDate = $.datepicker.formatDate("yy-mm-dd", new Date(currentDate));
+
+                                var jobstable = document.getElementById('jobstablerows');
+                                var row = jobstable.insertRow(0);
+                                var cell = row.insertCell(0);
+
+                                cell.innerHTML = jobnumber;
+                                cell.setAttribute("id", jobid);
+                                cell = row.insertCell(1);
+                                cell.innerHTML = jobname;
+                                cell = row.insertCell(2);
+                                cell.innerHTML = jobnickname;
+                                cell = row.insertCell(3);
+                                cell.innerHTML = joboffice;
+                                cell = row.insertCell(4);
+                                cell.innerHTML = studyTypes[jobstudytype];
+                                cell.setAttribute("studytype", jobstudytype);
+                                cell = row.insertCell(5);
+                                cell.innerHTML = currentDate;
+                                cell = row.insertCell(6);
+                                cell.innerHTML = currentDate;
+
+                                // set current job and highlight selection
+                                setCurrentJob(jobid, jobnumber, jobname, jobnickname, joboffice, jobstudytype);
+
+                                // re-initRowSelect function to include new row added
+                                initJobRowSelect();
+
+                                // close dialog
+                                $("#dialog-createjob").dialog("close");
+                                return true;
+                            } else if (resultString == "login required") {
+                                // close this form, inform user and logout
+                                loginRequired();
+
+                                // close dialog
+                                $("#dialog-createjob").dialog("close");
+                                return true;
+                            }
+                            else {
+                                // error dialog
+                                showErrorDialog("Unknown server error, please try again");
+                                return false;
+                            }
+                        }
+                        ,
+                        null
+                        );
+                } else {
+                    var jobid = readCookie("currentjobid");
+
+                    JobUpdate(
+                            jobid,
+                            jobnumber,
+                            jobname,
+                            jobnickname,
+                            jobstudytype,
+                            joboffice,
+                            null,  //area
+                            null,  //notes
+                            null,  //orderdate
+                            null,  //deliverydate
+                            function(context, status, response, resultString) {
+                                if (response == "success") {
+                                    // add new job row to table
+                                    var currentDate = Date();
+                                    currentDate = $.datepicker.formatDate("yy-mm-dd", new Date(currentDate));
+
+                                    var row = findJobRow(jobid);
+
+                                    if (row !== null)
+                                    {
+                                        var cells = row.cells;
+                                        cells[0].innerHTML = jobnumber;
+                                        cells[0].setAttribute("id", jobid);
+                                        cells[1].innerHTML = jobname;
+                                        cells[2].innerHTML = jobnickname;
+                                        cells[3].innerHTML = joboffice;
+                                        cells[4].innerHTML = studyTypes[jobstudytype];
+                                        cells[4].setAttribute("studytype", jobstudytype);
+                                        cells[5].innerHTML = currentDate;
+                                        cells[6].innerHTML = currentDate;
+
+                                        // set current job and highlight selection
+                                        setCurrentJob(jobid, jobnumber, jobname, jobnickname, joboffice, jobstudytype);
+
+                                        // re-initRowSelect function to include new row added
+                                        initJobRowSelect();
+                                    }
+
+                                    // close dialog
+                                    $("#dialog-createjob").dialog("close");
+                                    return true;
+                                } else if (resultString == "login required") {
+                                    // close this form, inform user and logout
+                                    loginRequired();
+
+                                    // close dialog
+                                    $("#dialog-createjob").dialog("close");
+                                    return true;
+                                }
+                                else {
+                                    // error dialog
+                                    showErrorDialog("Unknown server error, please try again");
+                                    return false;
+                                }
+                            }
+                            ,
+                            null
+                            );
+                }
+        }
+
+        return true;
+    }
+
+    /* close the Current Job (sets it to inactive on the server, removes it from the table and clears the Current Job)
+    */
+    function closeJob() {
+        var authToken = readCookie("authToken");
+        var jobid = readCookie("currentjobid");
+        var paramsString = METHODCALL_HEADER_PARAM_AUTHTOKEN + "=" + authToken + "&jobid=" + jobid;
+        $.ajax({
+            type: "GET",
+            url: "MethodCall.php/Job::Close",
+            data: paramsString,
+            dataType: "html",
+            cache: false,
+            success: function(result) {
+                jsonResponse = JSON.parse(result);
+                var response = jsonResponse['results']['response'];
+                if (response == "success") {
+                    // close acknowledge dialog
+                    $("#dialog-acknowledgeclose").dialog("close");
+                    
+                    // remove selected row from table, clear Current Job 
+                    clearCurrentJob();
+                } 
+                else {
+                    if (jsonResponse['results']['returnval']['resultstring'] == "login required") {
+                        // close this form, inform user and logout
+                        loginRequired();
+
+                        // close dialog
+                        $("#dialog-acknowledgeclose").dialog("close");
+                    } 
+                    else {
+                        showErrorDialog("Unknown server error, please try again");
+                    }
+                }
+            },
+            error: function (request, status, error) {
+                showErrorDialog("Server error: " + status);
+            }
+        });
+    }
+    /* initialize table sort function
+    */
+    function initJobTableSort() {
+        $('#sort-number, #sort-name, #sort-nickname, #sort-office, #sort-studytype, #sort-created, #sort-updated').click(function() {
+            var table = $("#jobstablerows");
+            var rows = table.find('tr').toArray().sort(comparer($(this).index()));
+            this.asc = !this.asc;
+            if (!this.asc) {
+                rows = rows.reverse();
+            }
+            for (var i = 0; i < rows.length; i++) {
+                table.append(rows[i]);
+            }
+        });
+    }
+    /* we're done here, close form and go back to homeview
+    */
+    function closeJobManager() {
+        $(".jobs-content").fadeToggle("fast");
+        openHomeView();
+    }
+    function resetJobErrorField() {    
+        var errorfield = document.getElementById('job-errorfield');
+        if (errorfield.innerText != "Enter job detail below") {
+            errorfield.style.color = "#000000";
+            errorfield.innerHTML = "Enter job detail below";
+        }
+    }
+
+ </script>
+
+<!-- placeholder for acknowledgeclose dialog -->
+<div class="dialog-overlay" id="dialog-acknowledgeclose">
+  <div class="dialog-wrapper">
+    <div class="dialog-content">
+      <h2>Close Active Job</h2>
+      <br />
+      <fieldset>
+        <label>Are you sure you want to close this job?</label>
+      </fieldset>
+      <br />
+      <div id="dlgbuttons">
+        <button onclick="cancelAcknowledge()">Cancel</button>
+        <button onclick="closeJob()">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- placeholder for createJob dialog -->
+<div class="dialog-overlay" id="dialog-createjob">
+  <div class="dialog-wrapper">
+    <div class="dialog-content">
+      <h2 id="job-createheader"></h2>
+      <br />
+      <div id="job-errorfield">Enter job detail below</div>
+      <fieldset>
+        <table style="width: 98%">
+            <tbody>
+                <tr>
+                    <td align="left" style="width: 25%">Office</th>
+                    <td align="left" style="width: 75%">Number</th>
+                </tr>
+                <tr>
+                    <td align="left" style="width: 25%"><select id=office-dropdown/></td>
+                    <td align="left" style="width: 75%"><input type="text" name="job-number" id="job-number" placeholder="Job number" required/></td>
+                </tr>
+            </tbody>
+        </table>
+        <label for="job-name">Name
+            <input type="text" name="job-name" id="job-name" placeholder="Job name" required />
+        </label>
+        <label for="job-nickname">Nickname
+          <input type="text" name="job-nickname" id="job-nickname" placeholder="Job nickname" required />
+        </label>
+
+        <label>Study Type</label>
+        <div id="radiobtns">
+          <div>
+            <input name="jobstudytype" type="radio" id="tubedata"/><label for="tubedata"><span><span></span></span>Roadway</label>
+          </div>
+          <div>
+            <input name="jobstudytype" type="radio" id="videodata"/><label for="videodata"><span><span></span></span>TMC</label>
+          </div>
+          <div>
+            <input name="jobstudytype" type="radio" id="origindata"/><label for="origindata"><span><span></span></span>Origin Destination</label>
+          </div>
+          <div>
+            <input name="jobstudytype" type="radio" id="adtdata"/><label for="adt"><span><span></span></span>ADT</label>
+          </div>
+        </div>
+      </fieldset>
+      <br />
+      <div id="dlgbuttons">
+        <button onclick="cancelDialog()">Cancel</button>
+        <button id="job-submitbtn" onclick="validInputs()">Submit</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- JobManager screen -->
+<div>
+  <div id="idaxtitle"><img style="float: right" src="images/IDAX_2-blue-35w.png" width="35"/>Current Job: <span id="jobnumber">Select or create a new job</span></div>
+  <button class="hdrbutton" id="doneaccountbtn" onclick="closeJobManager()">Done</button>
+  <button class="hdrbutton" style="float: left" onclick="createNewJob()">Create Job</button>
+  <button class="hdrbutton" id="editjobbtn" style="float: left" onclick="editJob()">Edit Job</button>
+  <button class="hdrbutton" id="closejobbtn" style="float: left" onclick="openAcknowledgeClose()">Close Job</button>
+  <button class="hdrbutton" id="processdatabtn" style="float: left" onclick="openJobsiteManager()">Manage Job Sites</button>
+  <br />
+  <div id="activejobs">Active Jobs</div>
+  <table id="jobstable">
+    <tr>
+      <td>
+        <table id="jobstablehead">
+          <col id="col-number"/>
+          <col id="col-name"/>
+          <col id="col-nickname"/>
+          <col id="col-office"/>
+          <col id="col-studytype"/>
+          <col id="col-created"/>
+          <col id="col-updated"/>
+          <col id="col-endspace"/>
+          <tr>
+            <td id="sort-number">Number</td>
+            <td id="sort-name">Name</td>
+            <td id="sort-nickname">Nickname</td>
+            <td id="sort-office">Office</td>
+            <td id="sort-studytype">Type</td>
+            <td id="sort-created">Created</td>
+            <td id="sort-updated">Updated</td>
+            <td></td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <div id="jobstablediv">
+          <table id="jobstablerows">
+            <col id="col-number"/>
+            <col id="col-name"/>
+            <col id="col-nickname"/>
+            <col id="col-office"/>
+            <col id="col-studytype"/>
+            <col id="col-created"/>
+            <col id="col-updated"/>
+          </table>
+        </div>
+      </td>
+    </tr>
+  </table>
+</div>

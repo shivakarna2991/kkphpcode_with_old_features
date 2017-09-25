@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta charset="utf-8" />
+
+    <title>IDAX</title>
+
+    <link href="css/base.css" rel="stylesheet" type="text/css" />
+    <link href="css/errorform.css" rel="stylesheet" type="text/css" />
+    <link rel="shortcut icon" href="images/favicon.ico" type="image/x-icon" />
+    <style type="text/css" media="screen"></style>
+
+    <script src="js/cookies.js" type="text/javascript"></script>
+    <script src="js/helperfunctions.js" type="text/javascript"></script>
+    <script src="js/idax.js" type="text/javascript"></script>
+    <script src="js/homeview.js" type="text/javascript"></script>
+    <script src="js/issuereporting.js" type="text/javascript"></script>
+    <script src="js/useraccount.js" type="text/javascript"></script>
+    <script src="js/manageaccounts.js" type="text/javascript"></script>
+    <script src="js/usersettings.js" type="text/javascript"></script>
+    <script src="js/fileuploads.js" type="text/javascript"></script>
+    <script src="js/jobmanager.js" type="text/javascript"></script>
+    <script src="js/JobManagerProxy.js" type="text/javascript"></script>
+    <script src="js/JobProxy.js" type="text/javascript"></script>
+    <script src="js/JobSiteProxy.js" type="text/javascript"></script>
+    <script src="js/DeviceProxy.js" type="text/javascript"></script>
+    <script src="js/KapturrKamProxy.js" type="text/javascript"></script>
+    <!--<script src="js/homeviewnew.js" type="text/javascript"></script>-->
+    <script src="//code.jquery.com/jquery-1.11.3.min.js"></script>
+    <script src="//code.jquery.com/ui/1.11.4/jquery-ui.js"></script>
+
+    <script>
+        // global session timer object used to logout when session expires
+        var timerObject = 0;
+
+        // autorun on load function
+        $(document).ready(function() {
+            // load global error dialog
+            initErrorDialog();
+
+            // if no valid session (from closing the browser without logging out) load login form
+            if (!validSession()) {
+                showLoginForm();
+            } 
+            // else valid session exists, reinitialize
+            else {
+                // get user navigation location
+                var navloc = readCookie("navloc");
+                
+                // show current user navigation location
+                updateMenuLocation(navloc);
+
+                // show user navigation banner
+                showUserMenu();
+
+                openFileUploads();
+
+                // open appropriate content for current navigation location
+                if (navloc == "jobmanager") {
+                    openJobManager();
+                } else if (navloc == "jobsitemanager") {
+                    openJobsiteManager();
+                } else if (navloc == "useraccount") {
+                    openUserSettings();
+                } else if (navloc == "accountmanagement") {
+                    openManageAccounts();
+                } else if (navloc == "issuereporting") {
+                    openIssueReporting();
+                } else if (navloc == "homeviewnew") {
+                    openNewHomeView();
+                } else {
+                    openHomeView();
+                }
+
+                // start session timeout logout timer
+                startSessionTimer();
+            }
+        });
+    </SCRIPT>
+  </head>
+
+  <body>
+    <header id="masthead"; style="display: none">
+      <!-- place elements for masthead banner/user account menu, initial state: hidden -->
+      <div id="navContainer">
+        <table id="menutable">
+          <tr>
+            <td id="tablecol1"><span id="navlocation">Home Menu</span></td>
+            <td id="tablecol2"><a href="#"></a></td> <!-- spce for adding archive reports menu option -->
+            <td id="tablecol3"><a href="#"><span id="fnamelname">username</span></a>
+              <ul>
+                <li><a href="#" onclick="openUserSettings();">Account Settings</a></li>
+                <li><a href="#" onclick="openIssueReporting();">Report an Issue</a></li>
+                <li><a href="#" onclick="userLogout();">Logout</a></li>
+              </ul>
+            </td>
+          </tr>
+        </table>
+      </div>
+    </header>
+
+    <div id="main_page">
+
+      <!-- placeholder elements for overlay popup error dialog, initial state: hidden -->
+      <div class="error-overlay" id="error-dialog">
+        <div class="error-wrapper">
+          <div class="error-content">
+            <h2>Error completing request</h2>
+            <br />
+            <fieldset>
+              <label id="errorlabel"></label>
+            </fieldset>
+            <br />
+            <div id="buttons">
+              <button id="errorbutton" onclick="cancelErrorDialog()">OK</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- placeholder elements for user login, initial state: hidden -->
+      <div class="login-content" id="loginTarget" style="display: none;"></div>
+
+      <!-- placeholder element for homeview, initial state: hidden -->
+      <div class="home-content" id="homeTarget" style="display: none;"></div>
+
+      <!-- placeholder element for useraccount, initial state: hidden -->
+      <div class="issue-content" id="issueTarget" style="display: none;"></div>
+
+      <!-- placeholder element for useraccount, initial state: hidden -->
+      <div class="user-content" id="userTarget" style="display: none;"></div>
+
+      <!-- placeholder element for acountmanager, initial state: hidden -->
+      <div class="accounts-content" id="accountsTarget" style="display: none;"></div>
+
+      <!-- placeholder element for jobmanager, initial state: hidden -->
+      <div class="jobs-content" id="jobsTarget" style="display: none;"></div>
+
+      <!-- placeholder element for processdata, initial state: hidden -->
+      <div class="jobsites-content" id="jobsitesTarget" style="display: none;"></div>
+
+    </div> <!-- main-page -->
+
+  </body>
+
+  <footer>
+    <div class="bar-wrap"> 
+      <!-- placeholder element for file upload, initial state: hidden -->
+      <div class="fileuploads-content" id="fileUploadsTarget"  style="display: none;"></div>
+      <div class="copyright"><img src="images/IDAX_2-white-30w.png" width="30" />, Inc. &copy;  2016 All Rights Reserved</div> 
+    </div> 
+  </footer> 
+</html>
+

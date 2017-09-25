@@ -1,0 +1,103 @@
+* {
+  margin: 0;
+  padding: 0;
+}
+
+
+body, html {
+  padding: 0px 0px 0px 0px;
+  font-family: 'Verdana', sans-serif;
+  -webkit-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
+  height: 100%;
+  min-width: 1000px;
+  background-color: #cccccc;
+}
+
+a { 
+  text-decoration: none; 
+  -webkit-transition: all .2s linear; 
+  -moz-transition: all .2s linear; 
+  -ms-transition: all .2s linear; 
+  -o-transition:  all .2s linear; 
+  transition: all .2s linear; 
+}
+
+#masthead {
+  position: fixed;
+  z-index: 999; /* make sure the menu drop dows appear above any other content */
+  top: 0px;
+  height: 45px;
+  width: 100%;
+  border-bottom: thin solid black;
+  background-color: #2E3639;
+}
+
+#error-dialog {
+  z-index: 999; /* make sure the error dialog appears above any other dialogs or forms */
+}
+
+
+#main_page {
+  position: relative;
+  display: table;
+  margin-bottom: 0px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 0px 0px 0px 0px;
+  border-width: 0px;
+  text-align: center;
+  min-height: 100%;
+  margin-bottom: -45px;
+}
+
+#main_page:after {
+  content: "";
+  display: block;
+}
+
+footer {
+  position: fixed;
+  bottom: 0px;
+  height: 45px;
+  width: 100%;
+  background-color: #2E3639;
+  border-top: thin solid black;
+  font-size: small;
+}
+		
+footer .bar-wrap {
+    margin: 0 auto;
+    margin-top: 15px;
+    position: relative;
+    width: 95%;
+} 
+
+.links {
+    float: left;
+    list-style: none outside none;
+    position: relative;
+} 
+
+.links li {
+    float: left;
+    margin-right: 10px;
+} 
+
+.links a {
+    color: #778888;
+} 
+
+.links a:hover {
+    color: #FFFFFF;
+} 
+
+.copyright {
+    color: #778888;
+    margin-top: 5px;
+} 
+
+.clear {
+  clear: both;
+}

@@ -1,0 +1,291 @@
+<link href="css/usersettings.css" rel="stylesheet" type="text/css" />
+<link href="css/dialogform.css" rel="stylesheet" type="text/css" />
+
+<script>
+    /* initialize this form
+    */
+    function initUserSettingsForm() {
+        initChangePasswordDialog();
+        initUserMessageDialog();
+    }
+    /* initialize placeholder jquery dialog 
+    */
+    function initChangePasswordDialog() {
+        $("#dialog-changepassword").dialog({
+            resizable: false,
+            dialogClass: "no-close",
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+        $("#oldpassword").on('input', resetChangeErrorField);
+        $("#newpassword").on('input', resetChangeErrorField);
+        $("#newpassword2").on('input', resetChangeErrorField);
+    }
+    /* open changePassword dialog
+    */
+    function changePassword() {
+        $("#dialog-changepassword").dialog("open");
+    }
+    /* cancel changePassword dialog
+    */
+    function cancelChangePasswordDialog() {
+        // close dialog
+        $("#dialog-changepassword").dialog("close");
+    }
+    /* if valid input, change user's password
+    */
+    function validateChangePassword() {
+        var errorfield = document.getElementById('changepassword-errorfield');
+        var oldPword = document.getElementById('oldpassword').value;
+        var newPword = document.getElementById('newpassword').value;
+        var newPword2 = document.getElementById('newpassword2').value;
+        
+        // validate newpasswords match
+        if (newPword != newPword2) {
+            errorfield.style.color = "#b5535f";
+            errorfield.innerHTML = "New passwords entered do not match";
+            return false;
+        }
+        
+        // validate new password formats
+        if (!validPassword(newPword) || !validPassword(newPword2)) {
+            errorfield.style.color = "#b5535f";
+            errorfield.innerHTML = "Invalid format, 8+ chars, 1 number and 1 uppercase requried";
+            return false;
+        }
+        
+        // register new password
+        // valid inputs, proceed with call to server
+        var authToken = readCookie("authToken");
+        var paramsString = METHODCALL_HEADER_PARAM_AUTHTOKEN + "=" + authToken + "&oldpassword=" + oldPword + "&newpassword=" + newPword;
+        $.ajax({
+            type: "GET",
+            url: "MethodCall.php/AccountManager::ChangePassword",
+            data: paramsString,
+            dataType: "html",
+            cache: false,
+            success: function(result) {
+                var jsonResponse = JSON.parse(result);
+                if (jsonResponse['results']['response'] == "success") {
+                    // close the changePassword dialog
+                    $("#dialog-changepassword").dialog("close");
+                    
+                    // put up message dialog telling the user their password was successfully changed
+                    openUserMessageDialog("Your password has been changed.");
+                }
+                // else handle error for user 
+                else {
+                    if (jsonResponse['results']['returnval']['resultstring'] == "login required") {
+                        // close the changePasswordDialog and this form, inform user and logout
+                        loginRequired();
+                        $("#dialog-changepassword").dialog("close");
+                        $(".user-content").hide();
+                    } 
+                    else {
+                        errorfield.style.color = "#b5535f";
+                        errorfield.innerHTML = "Error changing password: " + jsonResponse['results']['returnval']['resultstring'];
+                    }
+                }
+            },
+            error: function (request, status, error) {
+                showErrorDialog("Server error: " + status);
+            }
+        });        
+    }
+    /* initialize placeholder jquery dialog 
+    */
+    function initUserMessageDialog() {
+        $("#dialog-usermessage").dialog({
+            resizable: false,
+            dialogClass: "no-close",
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+    }
+    /* open changePassword dialog
+    */
+    function openUserMessageDialog(message) {        
+        // set user message
+        document.getElementById('usermessagelabel').innerHTML = message;
+
+        // show message dialog
+        $("#dialog-usermessage").dialog("open");
+    }
+    /* cancel changePassword dialog
+    */
+    function cancelUserMessageDialog() {
+        // close dialog
+        $("#dialog-usermessage").dialog("close");
+    }
+    /* validate inputs, and if valid post createNewAccount inputs
+    */
+    function saveSettings() {
+        var errorfield = document.getElementById('usersettings-errorfield');
+        var fname = document.getElementById('userfirstname').value;
+        var lname = document.getElementById('userlastname').value;
+        var email = document.getElementById('useremail').value;
+
+        // make sure one name at least has non-whitespace chars
+        var fnameTest = fname.replace(/^\s+|\s+$/g, ''); 
+        var lnameTest = lname.replace(/^\s+|\s+$/g, ''); 
+        if (fnameTest.length == 0 && lnameTest.length == 0) {
+            errorfield.style.color = "#b5535f";
+            errorfield.innerHTML = "One First or Last name is required";
+            return false;
+        } 
+        
+        // test that the username matches email regular expression requirements
+        if (!validEmail(email)) {
+            errorfield.style.color = "#b5535f";
+            errorfield.innerHTML = "Username requires a valid email address - xxx@xx.xx";
+            return false;
+        }
+
+        // valid inputs, proceed with call to server
+        var authToken = readCookie("authToken");
+        var paramsString = METHODCALL_HEADER_PARAM_AUTHTOKEN + "=" + authToken + "&firstname=" + fname + "&lastname=" + lname + "&email=" + email;
+        $.ajax({
+            type: "GET",
+            url: "MethodCall.php/AccountManager::UpdateAccount",
+            data: paramsString,
+            dataType: "html",
+            cache: false,
+            success: function(result) {
+                var jsonResponse = JSON.parse(result);
+                if (jsonResponse['results']['response'] == "success") {
+                    // update user's name field on menu and in saved cookies
+                    createCookie("userName", email);
+                    createCookie("firstName", fname);
+                    createCookie("lastName", lname);
+                    showUserMenu();
+                    
+                    // save off new currentUser values
+                    cuFname = fname;
+                    cuLname = lname;
+                    // if email changed, let user know they need to check their inbox to validate before it takes effect
+                    if (cuEmail != email) {
+                        // put up message dialog telling the user their password was successfully changed
+                        openUserMessageDialog("Your account changes have been saved.<br /><br />An email will be sent to " + email + " with a link to click for confirmation. You must confirm your new email address before you can use it to login. Until then, your current email will remain active.<br /><br />(Note if you don't find the email in your inbox, check your junk mail folder in case your spam filter doesn't recognize the host domain.)");
+                    } else {
+                        // put up message dialog telling the user their password was successfully changed
+                        openUserMessageDialog("Your account changes have been saved.");
+                    }
+                    cuEmail = email;
+                    
+                    // reset save button to disabled
+                    document.getElementById('savesettingsbtn').disabled = true;
+                }
+                // else handle error for user 
+                else {
+                    if (jsonResponse['results']['returnval']['resultstring'] == "login required") {
+                        // close this form, inform user and logout
+                        loginRequired();
+                        $(".user-content").hide();
+                    } 
+                    else {
+                        // test error dialog
+                        showErrorDialog("Error changing settings: " + jsonResponse['results']['returnval']['resultstring']);
+                    }
+                }
+            },
+            error: function (request, status, error) {
+                showErrorDialog("Server error: " + status);
+            }
+        });
+    }
+
+    /* enable save button if any field values have been changed
+    */
+    function setSaveSettingsState() {
+        // if the current uer account data has been changed, enable save button
+        document.getElementById('savesettingsbtn').disabled = (cuFname == document.getElementById('userfirstname').value &&
+                                                                cuLname == document.getElementById('userlastname').value &&
+                                                                cuEmail == document.getElementById('useremail').value);
+    }
+    function resetChangeErrorField() {
+        var errorfield = document.getElementById('changepassword-errorfield');
+        if (errorfield.innerText != "Enter your old and new passwords below") {
+            errorfield.style.color = "#000000";
+            errorfield.innerHTML = "Enter your old and new passwords below";
+        }
+    }
+
+    /* we're done here, close form
+    */
+    function closeUserSettings() {
+        $(".user-content").fadeToggle("fast");
+        // open homeView
+        openHomeView();
+    }
+ </script>
+
+<!-- placeholder for usermessage dialog -->
+<div class="dialog-overlay" id="dialog-usermessage">
+  <div class="dialog-wrapper">
+    <div class="dialog-content">
+      <h2>Request Completed</h2>
+      <br />
+      <fieldset>
+        <label id="usermessagelabel"></label>
+      </fieldset>
+      <br />
+      <div id="dlgbuttons">
+        <button onclick="cancelUserMessageDialog()">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- placeholder for editAccount dialog -->
+<div class="dialog-overlay" id="dialog-changepassword">
+  <div class="dialog-wrapper">
+    <div class="dialog-content">
+      <h2>Change Password</h2>
+      <br />
+      <div id="changepassword-errorfield">Enter your old and new passwords below</div>
+      <fieldset>
+        <label for="oldpassword">Old Password
+          <input type="password" name="oldpassword" id="oldpassword" placeholder="8-20 chars, at least 1 number and 1 uppercase letter" pattern="(?=\d*)(?=[a-z]*)(?=[A-Z]*).{8,20}" required />
+        </label>
+        <label for="newpassword">New Password
+          <input type="password" name="newpassword" id="newpassword" placeholder="8-20 chars, at least 1 number and 1 uppercase letter" pattern="(?=\d*)(?=[a-z]*)(?=[A-Z]*).{8,20}" required />
+        </label>
+        <label for="newpassword2">Retype New Password
+          <input type="password" name="newpassword2" id="newpassword2" placeholder="8-20 chars, at least 1 number and 1 uppercase letter" pattern="(?=\d*)(?=[a-z]*)(?=[A-Z]*).{8,20}" required />
+        </label>
+      </fieldset>
+      <br />
+      <div id="dlgbuttons">
+        <button onclick="cancelChangePasswordDialog()">Cancel</button>
+        <button id="passwordsavebtn" onclick="validateChangePassword()">Change</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- UserSettings screen -->
+<div>
+  <div id="idaxtitle"><img  style="float: right" src="images/IDAX_2-blue-35w.png" width="35"/>User Settings</div>
+  <button class="hdrbutton" onclick="closeUserSettings()">Done</button>
+  <button class="hdrbutton" style="float: left" onclick="changePassword()">Change Password</button>
+  <button class="hdrbutton" id="savesettingsbtn" style="float: left; margin-left: 20px" onclick="saveSettings()">Save Changes</button>
+  <br />
+  <br />
+  <br />
+  <div id="usersettingscontent">
+    <div id="usersettings-errorfield">Change your settings as needed below</div>
+    <fieldset>
+      <label for="userfirstname">First Name
+        <input type="text" name="userfirstname" id="userfirstname" placeholder="Name" required />
+      </label>
+      <label for="userlastname">Last Name
+        <input type="text" name="userlastname" id="userlastname" placeholder="Name" required />
+      </label>
+      <label for="useremail">Username
+        <input type="text" name="useremail" id="useremail" placeholder="Registered email address" pattern="[a-zA-Z0-9._%+-]+@[a-zA-z0-9.-]+\.[a-zA-Z]{2,4}" required />
+      </label>
+    </fieldset>
+  </div>
+</div>

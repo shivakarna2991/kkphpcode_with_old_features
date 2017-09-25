@@ -1,0 +1,44 @@
+/*
+*    homeview layout
+*/
+
+div.home-content {
+  position: absolute;
+  height: 180px;
+  width: 400px;
+  top: 75px;
+  left: 50%;
+  margin-left: -300px;
+  text-align: left;
+  background-color: rgb(255,255,255);
+  border-radius: 2px;
+}
+
+/* form header buttons */
+.mainbutton {
+  background-color: #0065ca;
+  border: 1px solid rgba(0,0,0,.1);
+  color: rgb(255,255,255);
+  font-family: 'Varela Round', sans-serif;
+  font-size: .85em;
+  margin-top: 5px;
+  margin-left: 20px;
+  width: 160px;
+  height: 80px;
+  padding: .25em;
+  transition: all 400ms ease;
+  float: right; 
+  margin-right:20px; 
+}
+.mainbutton:hover {
+  background-color: #50c1e9;
+  cursor: pointer;
+}
+.mainbutton[disabled]:active,
+.mainbutton[disabled],
+.mainbutton[disabled]:hover{
+  color: GrayText;
+  cursor: inherit;
+  background-color: #ddd;
+  background: #ddd;
+}

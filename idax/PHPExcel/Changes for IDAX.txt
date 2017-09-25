@@ -1,0 +1,52 @@
+This directory has changes/extensions for the PHPExcel library.  It is not the full library, just the changes/extensions.
+
+The full library is in idax/vendor/PHPExcel.
+
+The way this works is that the app will include the modified PHPExcel.php from here instead of the original one in the full library.  The modified one uses a modified autoloader which will check for class files first in changes/extensions directory, and, if not found, then check in the full library.
+
+PHP Excel changes
+
+Change for autoloader
+	/home/idax/PHPExcel/Classes
+		- PHPExcel.php
+			- Line 6: Deleted inclusion of the base autoloader.
+			- Lines 8-11: Define the path to the changes/extension folder and include the modified autoloader.
+		- /PHPExcel
+			- Autoloader.php: new file, derived from the base autoloader, that first checks for the class file exists in the changes/extensions directory.
+
+Changes to add support for saving PDF using wkhtmltopdf
+	/home/idax
+		- /PHPExcel/Classes
+			- Worksheet.php
+			- /Worksheet
+				- HTMLHeaderFooter.php: new file derived from HeaderFooter.php - headers/footers used by PHPExcel to add headers/footers to generated HTML
+				- PageMargins.php: replacement for bas PageMargins.php.  Adds margins passed to wkhtmltopdf
+				- PDFHeaderFooter.php: new file derived from HeaderFooter.php - headers/footers passed to wkhtmltopdf
+			- /Writer
+				- HTML.php: changed
+					-Line 128: Added $pageNumber member variable to support adding the page number to the HTML headers and footers.
+					-Lines 1683-1712: Changes to support HTML header
+					-Lines 1170-1201: Changes to support HTML footer
+			- /PDF
+				idaxPDF.php: new file, derived from base mPDF.php. uses the new "ipdf" class and sets ipdf class-specific settings (margins, headers and footers).
+		- /ipdf
+			- ipdf.php: new file that invokes the wkhtmltopdf tool to save the html as a pdf file.
+
+Changes for excluding cells not in the print area.
+	/Classes
+		/Writer
+			HTML.php: changed
+				-Lines 389-408: Added InPrintRange member function to support excluding cells not in the print areas.
+				-Lines 470-492: Added code to get the print area ranges.
+				-Line 517: Added code to determine if the cell is in the print ranges.
+				-Line 520: Commented this line out so that cells that don't exist don't get rendered.
+				-Line 523: Added a check to determine if there is any rowData before generating the row.
+
+Fix for removing HTML incorrectly genertated for charts / drawings when no chart/drawing exists.
+	/Classes
+		/Writer
+			HTML.php: changed
+				-Line 597: new $generateHTML variable to determine if HTML should be generated (default to false).
+				-Line 604: set $generateHTML to true if there is a chart to render.
+				-Line 620: set $generateHTML to true if there is a drawing to render.
+				-Line 634: check $generateHTML to determine if HTML should be generated.

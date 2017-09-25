@@ -1,0 +1,25 @@
+/*
+*    user settings layout
+*/
+
+div.user-content {
+  position: absolute;
+  height: 400px;
+  width: 600px;
+  top: 75px;
+  left: 50%;
+  margin-left: -300px;
+  text-align: left;
+  background-color: rgb(255,255,255);
+  border-radius: 2px;
+}
+
+#usersettings-errorfield{
+  text-align: left;
+  padding-bottom: 10px;
+}
+
+#usersettingscontent {
+  margin-left: 20px;
+  margin-right: 20px;
+}

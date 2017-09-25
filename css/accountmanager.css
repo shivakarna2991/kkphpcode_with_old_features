@@ -1,0 +1,98 @@
+/*
+*    accountsmanager layout
+*/
+
+div.accounts-content {
+  position: absolute;
+  height: 750px;
+  width: 1057px;
+  top: 75px;
+  left: 50%;
+  margin-left: -528px;
+  text-align: left;
+  background-color: rgb(255,255,255);
+  border-radius: 2px;
+}
+
+/*
+*    accounts header
+*/
+#activeaccts {
+  margin-top: 40px;
+  margin-left: 20px; 
+}
+/* 
+*    Jobs table
+*/
+#acctstable {
+  width: 1017px;
+  height: 575px;
+  border-collapse: collapse;
+  border-style: solid; 
+  border-width: 1px;
+  border-color: #666;
+  table-layout: fixed;
+  margin-left: 20px;
+  text-align: center;
+  font-family:sans;
+}
+#acctstable td {
+  height: 25px;
+}
+#acctstable tr td {
+  text-align: center;
+}
+#acctstable tr td:first-child {
+  text-align: left;
+}
+#acctstable tr td:nth-child(2) {
+  text-align: left;
+}
+
+#col-lastlogin, #col-created, #col-registered {
+  width: 90px;
+}
+#col-role {
+  width: 140px;
+}
+#col-rating, #col-status {
+  width: 55px;
+}
+#col-username {
+  width: 150px;
+}
+#col-useremail {
+  width: 220px;
+}
+#col-endspace {
+  width: 25px;
+}
+#acctstablehead {
+  background:#666;
+  color:#fff;
+  width: 1015px;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+#acctstablediv {
+  width: 1015px;
+  height: 575px;
+  overflow: auto;
+}
+#acctstablerows {
+  vertical-align: middle;
+  width: 990px;
+  color: #444444;
+  font-size: .85em;
+}
+#acctstablerows tr:nth-child(2n+1) {
+  background: #f4f4f4;
+}
+#acctstablerows tbody tr:hover {
+  background: #cccccc;
+  cursor: pointer;
+}

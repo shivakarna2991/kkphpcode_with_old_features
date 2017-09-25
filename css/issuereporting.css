@@ -1,0 +1,30 @@
+/*
+*    user settings layout
+*/
+
+div.issue-content {
+  position: absolute;
+  height: 535px;
+  width: 650px;
+  top: 75px;
+  left: 50%;
+  margin-left: -300px;
+  text-align: left;
+  background-color: rgb(255,255,255);
+  border-radius: 2px;
+}
+
+#issue-errorfield
+ {
+  text-align: left;
+  padding-bottom: 10px;
+}
+#issuecontent {
+  padding: 20px;    
+}
+
+#attachFiles {
+  float: right;
+  margin-right:41px;
+  margin-top: 0px;
+}

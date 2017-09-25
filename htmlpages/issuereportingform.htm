@@ -1,0 +1,242 @@
+<link href="css/issuereporting.css" rel="stylesheet" type="text/css" />
+<link href="css/dialogform.css" rel="stylesheet" type="text/css" />
+
+<script>
+    /* global file attachment array */ 
+    var attachFiles = [];
+
+    /* initialize this form
+    */
+    function initIssueReportingForm() {
+        initIssueMessageDialog();
+        initAttachFileClicker();
+    }
+    /* initialize file picker
+    */
+    function initAttachFileClicker() {
+        var attachFileSelect = document.getElementById("attachFiles");
+        var attachFileElem = document.getElementById("attachFileElem");
+
+        attachFileSelect.addEventListener("click", function (e) {
+            if (attachFileElem) {
+                attachFileElem.click();
+            }
+            e.preventDefault(); // prevent navigation propagation
+        }, false);
+    }
+    /* file picker handler
+    */
+    function handleFiles(files) {
+        // save off files list for upload during submit
+        attachFiles = files;
+    }
+    /* initialize placeholder jquery dialog 
+    */
+    function initIssueMessageDialog() {
+        $("#dialog-issuemessage").dialog({
+            resizable: false,
+            dialogClass: "no-close",
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+    }
+    /* open changePassword dialog
+    */
+    function openIssueMessageDialog(message) {        
+        // set user message
+        document.getElementById('issuemessagelabel').innerHTML = message;
+
+        // show message dialog
+        $("#dialog-issuemessage").dialog("open");
+    }
+    /* cancel changePassword dialog
+    */
+    function cancelIssueMessageDialog() {
+        // close dialog
+        $("#dialog-issuemessage").dialog("close");
+        closeIssueReporting();
+    }
+    /* validate issueReport inputs, then upload file attachments if any, then call to submit the report
+    */
+    function uploadAttachments() {
+        var errorfield = document.getElementById('issue-errorfield');
+        var title = document.getElementById('issuetitle').value;
+        var description = document.getElementById('issuedescription').value;
+        // make sure one name at least has non-whitespace chars
+        var titleTest = title.replace(/^\s+|\s+$/g, ''); 
+        var descTest = description.replace(/^\s+|\s+$/g, ''); 
+        if (titleTest.length == 0 && descTest.length == 0) {
+            errorfield.style.color = "#b5535f";
+            errorfield.innerHTML = "Title and description are required fields";
+            return false;
+        } 
+
+        // if we have attachments, upload those first
+        if (attachFiles.length) {
+            // call ajax function to upload all datafiles at once
+            var dataparams = new FormData();
+            for (var i=0; i<attachFiles.length; i++) {
+                dataparams.append ('upfile[]', attachFiles[i]);
+            }
+            // append authorization token
+            dataparams.append(METHODCALL_HEADER_PARAM_AUTHTOKEN, readCookie('authToken'));
+            dataparams.append('numfiles', attachFiles.length);
+            
+            // post files to server
+            $.ajax({
+                type: "POST",
+                url: "UploadDownload/uploaddatafiles.php",
+                data: dataparams,
+                processData: false,
+                contentType: false,
+                enctype: 'multipart/form-data',
+                success: function (result) {
+                    // parse the return string (JSON not available for return with this multipart/form-data call)
+                    var successRes = result.split(":");
+                    var attachParams = [];
+                    if (successRes[0] == "success") {
+                        for (var i=1; i<successRes.length; i++) {
+                            var filenames = successRes[i].split("*-*");
+                            attachParams.push({tmpfile: filenames[1].trim(), filename: filenames[3].trim()});
+                        }
+                        // submit the issue and attach the files
+                        submitIssueReport(attachParams);
+                    }
+                    // else handle error for user 
+                    else {
+                        if (successRes[1] == "login required") {
+                            // close this form
+                            $(".issue-content").fadeToggle("fast");
+                            // inform user and logout
+                            loginRequired();
+                        } else {
+                            errorfield.style.color = "#b5535f";
+                            errorfield.innerHTML = "Error, uploading attachments:<br />"+successRes[1];
+                        }
+                    }
+                },
+                error: function (request, status, error) {
+                    errorfield.style.color = "#b5535f";
+                    errorfield.innerHTML = "Server error, uploading attachments: "+status;
+                }
+            });    
+        } else {
+            // submit the issue without files
+            submitIssueReport(null);
+        }
+    }
+    /* submit new IssueReport with attachments, if any
+    */
+    function submitIssueReport(attachParams) {
+        var title = document.getElementById('issuetitle').value;
+        var description = document.getElementById('issuedescription').value;
+        var reproSteps = document.getElementById('issuerepro').value;
+        var itype = document.getElementById('issuetype');
+        var ipriority = document.getElementById('issuepriority');
+        var type = itype.options[itype.selectedIndex].value;
+        var priority = ipriority.options[ipriority.selectedIndex].value;
+        
+        // add standard params for call to server
+        var paramsString = METHODCALL_HEADER_PARAM_AUTHTOKEN + "=" + readCookie("authToken") + "&title=" + title + "&description=" + description + "&reprosteps=" + reproSteps + "&priority=" + priority + "&type=" + type;
+        // add all attachment params, if any
+        var i = 0;
+        if (attachParams != null) {
+            while(attachParams.length > 0) {
+                var attachParamSet = attachParams.pop();
+                paramsString = paramsString + "&tmpfile_"+i+"="+attachParamSet.tmpfile + "&filename_"+i+"="+attachParamSet.filename;
+                i++;
+            }
+        }
+        $.ajax({
+            type: "POST",
+            url: "UploadDownload/submitissue.php",
+            data: paramsString,
+            dataType: "html",
+            cache: false,
+            success: function(result) {
+                var jsonResponse = JSON.parse(result);
+                if (jsonResponse['results']['response'] == "success") {
+                    // put up message dialog telling the user their report has been submitted
+                    openIssueMessageDialog("Issue report has been submitted.");
+                }
+                // else handle error for user 
+                else {
+                    if (jsonResponse['results']['returnval']['resultstring'] == "login required") {
+                        // close this form, inform user and logout
+                        loginRequired();
+                        $(".issue-content").fadeToggle("fast");
+                    } 
+                    else {
+                        // test error dialog
+                        showErrorDialog("Error reporting issue: " + jsonResponse['results']['returnval']['resultstring']);
+                    }
+                }
+            },
+            error: function (request, status, error) {
+                showErrorDialog("Server error: " + status);
+            }
+        });
+    }
+
+    /* we're done here, close form 
+    */
+    function closeIssueReporting() {
+        $(".issue-content").hide();
+        // open homeView
+        openHomeView();
+    }
+ </script>
+
+<!-- placeholder for issuemessage dialog -->
+<div class="dialog-overlay" id="dialog-issuemessage">
+  <div class="dialog-wrapper">
+    <div class="dialog-content">
+      <h2>Request Completed</h2>
+      <br />
+      <fieldset>
+        <label id="issuemessagelabel"></label>
+      </fieldset>
+      <br />
+      <div id="dlgbuttons">
+        <button onclick="cancelIssueMessageDialog()">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- AccountManager screen -->
+<div id="idaxtitle"><img  style="float: right" src="images/IDAX_2-blue-35w.png" width="35"/>Issue Reporting</div>
+<div id="issuecontent">
+  <div id="issue-errorfield">Enter issue details below</div>
+  <fieldset>
+    <label for="issuetitle">Title
+      <input type="text" name="issuetitle" id="issuetitle" placeholder="A title for this issue" required />
+    </label>
+    <label for="priority" style="margin-bottom: 10px;">Issue type: 
+      <select name="issuetype" id="issuetype">
+        <option value="0" selected="selected">Problem report</option>
+        <option value="1">Feature request</option>
+      </select>
+      <span style="margin-left: 25px">Priority:</span> 
+      <select name="priority" id="issuepriority">
+        <option value="0">High</option>
+        <option value="1" selected="selected">Medium</option>
+        <option value="2">Low</option>
+      </select>
+      <input type="file" id="attachFileElem" multiple style="display:none" onchange="handleFiles(this.files)">
+      <button class="hdrbutton"id="attachFiles">Attach Files</button>
+    </label>
+    <label for="issuedescription">Description
+      <textarea type="text" name="issuedescription" id="issuedescription" style="height: 55px" placeholder="Description of the issue" required></textarea>
+    </label>
+    <label for="issuerepro">Steps to reproduce
+      <textarea type="text" name="issuerepro" id="issuerepro" style="height: 55px" placeholder="Step by step account"></textarea>
+    </label>
+  </fieldset>
+  <br />
+  <div id="dlgbuttons">
+    <button onclick="closeIssueReporting()">Cancel</button>
+    <button id="submitissue" onclick="uploadAttachments()">Submit</button>
+  </div>
+</div>

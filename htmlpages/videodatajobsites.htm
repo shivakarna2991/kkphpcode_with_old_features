@@ -1,0 +1,2352 @@
+<link href="css/videojobsites.css" rel="stylesheet" type="text/css" />
+<link href="css/dialogform.css" rel="stylesheet" type="text/css" />
+<link href="css/jquery-datepicker-ui.css" rel="stylesheet" type="text/css" />
+
+<script src="js/JobProxy.js" type="text/javascript"></script>
+<script src="js/JobSiteProxy.js" type="text/javascript"></script>
+<script src="js/uploadvideofunctions.js" type="text/javascript"></script>
+<script src="js/googlemaphelpers.js" type="text/javascript"></script>
+<script src="js/momentjs/moment.min.js"></script>
+<script src="js/momentjs/moment-timezone.min.js"></script>
+
+<!--<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCNNUr1fqFte42tIHfRWL_lhzyrt6fe_CU&callback=initGoogleMap"></script>-->
+
+<script>
+    /* globals */
+    var videoUploadJobs = [];
+    var googleMap = null;
+
+	var refreshButton;
+	var setIpConfigButton;
+
+	var deviceStatusText;
+	var deviceDateText;
+	var deviceIpConfig;
+	var deviceTimeText;
+	var deviceBatteryLevelText;
+	var deviceStorageInfoText;
+	var deviceWifiInfoText;
+	var deviceCellularInfoText;
+	var kamPlayVideoElement;
+	var kamVideoSegmentsElement;
+    var onlineStatusImage;
+    var capturingStatusImage;
+    var uploadingStatusImage;
+    var streamingStatusImage;
+
+	var deviceTime;
+	var deviceTimeIntervalId;
+	var deviceTimeAcquired;
+
+	var kamid;
+
+	var onemb = 1048576;
+	var onegb = 1073741824;
+
+	var refreshDataSequence = [
+			{refreshbuttontext:"IP config...", statusmessage:"Retrieving device IP configuration...", method:function(){ DeviceGetInfo(kamid, OnDeviceGetInfoComplete, null); }},
+			{refreshbuttontext:"Status...", statusmessage:"Retrieving kapturrkam status...", method:function(){ KapturrKamQueryStatus(kamid, OnKapturrKamQueryStatusComplete, null); }}
+			];
+
+	var refreshingData = false;
+	var nextRefreshSequence;
+
+	var deviceResponding = -1; // -1 - unknown, 0 - not responding, 1 - responding
+
+	function HandleErrorResponse(
+		what,
+		textStatus,
+		response,
+		resultString
+		)
+	{
+		if (resultString == "login required")
+		{
+			if (refreshingData)
+			{
+				StopRefreshSequence(null, null);
+			}
+
+			loginRequired();
+		}
+		else if (refreshingData)
+		{
+			StopRefreshSequence(what, resultString);
+		}
+		else
+		{
+			openErrorMessageDialog(what, resultString);
+		}
+	}
+
+	function UpdateTimeOnInterval()
+	{
+		UpdateDateTimeDisplay();
+	}
+
+	function UpdateDateTimeDisplay()
+	{
+		// Set the date and time to the device time + the time elapsed since we acquired the device time.
+		time = moment(deviceTime.utc);
+		time.utcOffset(parseInt(deviceTime.timezoneOffset));
+
+		// Add the elapsed time
+		time.add(Date.now() - deviceTimeAcquired, "ms");
+
+		deviceDateText.innerHTML = time.format("YYYY-MM-DD");
+		deviceTimeText.innerHTML = time.format("HH:mm:ss");
+	}
+
+	function DeviceTimeAcquired(
+		acquiredDeviceTime
+		)
+	{
+		deviceTime = acquiredDeviceTime;
+		deviceTimeAcquired = Date.now();
+
+		UpdateDateTimeDisplay();
+
+		if (deviceTimeIntervalId == null)
+		{
+			deviceTimeIntervalId = window.setInterval(UpdateTimeOnInterval, 1000);
+		}
+	}
+
+	function OnKapturrKamQueryStatusComplete(
+		context,
+		textStatus,
+		response,
+		deviceresponded,
+		resultString,
+		devicestatus,
+		time
+		)
+	{
+		deviceResponding = deviceresponded;
+
+		if ((textStatus == "success") && (response == "success"))
+		{
+			DeviceTimeAcquired(time);
+
+			// Get the battery info
+			pct = Math.round((1000 * devicestatus.power.battery.charge) / 10);
+			deviceBatteryLevelText.innerHTML = pct + "%, " + devicestatus.power.battery.voltage + ", " + devicestatus.power.battery.current;
+
+			//
+			// Get storage info.
+			//
+			// 1. Scan for removable storage card which is indicated by fileSystem = /mdedia/video.
+			// 2. Units is bytes.
+			//
+
+			storageInfo = "-";
+
+			for (i=0; i<devicestatus.storage.length; i++)
+			{
+				if (devicestatus.storage[i].fileSystem == "/media/video")
+				{
+					if (devicestatus.storage[i].size >= onegb)
+					{
+						used = Math.round(10 * (devicestatus.storage[i].used / onegb)) / 10;
+						size = Math.round(10 * (devicestatus.storage[i].size / onegb)) / 10;
+						storageInfo = used + "GB / " + size + "GB";
+					}
+					else
+					{
+						used = Math.round(10 * (devicestatus.storage[i].used / onemb)) / 10;
+						size = Math.round(10 * (devicestatus.storage[i].size / onemb)) / 10;
+						storageInfo = used + "MB / " + size + "MB";
+					}
+
+					break;
+				}
+			}
+
+			deviceStorageInfoText.innerHTML = storageInfo;
+
+			// Get the video format.
+			videoFormat = devicestatus.videoFormat;
+
+			if ((videoFormat.width != undefined) && (videoFormat.height != undefined))
+			{
+				videoFormatText.innerHTML = videoFormat.width + " X " + videoFormat.height + ", "+ videoFormat.pixelFormat;
+			}
+			else
+			{
+				videoFormatText.innerHTML = "-";
+			}
+
+			// Find the WiFi adapter and set WiFi IP address
+			wifiActive = false;
+			cellularActive = false;
+
+			for (i=0; i<devicestatus.network.length; i++)
+			{
+				if (devicestatus.network[i].type == "Wireless")
+				{
+					wifiipaddress = devicestatus.network[i].ipAddress;
+					wifiActive = true;
+				}
+				else if (devicestatus.network[i].type == "Cellular")
+				{
+					cellularipaddress = devicestatus.network[i].ipAddress;
+					cellularActive = true;
+				}
+			}
+
+			if (wifiActive)
+			{
+				deviceWifiInfoText.innerHTML = "Active (" + wifiipaddress + ")";
+			}
+			else
+			{
+				deviceWifiInfoText.innerHTML = "Inactive";
+			}
+
+			if (cellularActive)
+			{
+				deviceCellularInfoText.innerHTML = "Active (" + cellularipaddress + ")";
+			}
+			else
+			{
+				deviceCellularInfoText.innerHTML = "Inactive";
+			}
+
+			ContinueRefreshSequence();
+		}
+		else
+		{
+			HandleErrorResponse("Failed to obtain kapturrkam status.", textStatus, response, resultString);
+		}
+
+		UpdateUI();
+	}
+
+	function OnDeviceGetInfoComplete(
+		context,
+		textStatus,
+		response,
+		resultString,
+		device
+		)
+	{
+		if ((textStatus == "success") && (response == "success"))
+		{
+			deviceIpConfig = {ipv4address: device.ipv4address, port: device.port};
+
+			ContinueRefreshSequence();
+		}
+		else
+		{
+			HandleErrorResponse("Failed to obtain device information.", textStatus, response, resultString);
+		}
+	}
+
+	function OnDeviceUpdateComplete(
+		context,
+		textStatus,
+		response,
+		resultString
+		)
+	{
+		if ((textStatus == "success") && (response == "success"))
+		{
+			RefreshData();
+		}
+		else
+		{
+			HandleErrorResponse("Failed setting device IP configuration.", textStatus, response, resultString);
+		}
+	}
+
+	function OnSetIpConfigClicked()
+	{
+		openIpConfigDialog();
+	}
+
+	function UpdateUI()
+	{
+		if (!deviceResponding)
+		{
+			deviceStatusText.innerHTML = "<div style=\"color:red;\">Not Responding</div>";
+
+			refreshButton.disabled = false;
+		}
+		else
+		{
+			if (deviceResponding == 1)
+			{
+				deviceStatusText.innerHTML = "<div style=\"color:green;\">Online</div>";
+			}
+
+			refreshButton.disabled = refreshingData;
+		}
+	}
+
+	function StopRefreshSequence(
+		errorMessage,
+		resultString
+		)
+	{
+		if (errorMessage != null)
+		{
+            console.log("errorMessage=" + errorMessage + ", resultString=" + resultString);
+			//openErrorMessageDialog(errorMessage, resultString);
+		}
+
+		refreshingData = false;
+		refreshButton.innerHTML = "Refresh";
+		UpdateUI();
+	}
+
+	function ContinueRefreshSequence()
+	{
+		if (refreshingData)
+		{
+			if (nextRefreshSequence < refreshDataSequence.length)
+			{
+				refreshButton.innerHTML = refreshDataSequence[nextRefreshSequence].refreshbuttontext;
+				refreshDataSequence[nextRefreshSequence].method();
+
+				nextRefreshSequence += 1;
+			}
+			else
+			{
+				refreshingData = false;
+				refreshButton.innerHTML = "Refresh";
+				UpdateUI();
+			}
+		}
+	}
+
+	function GetData()
+	{
+		deviceResponding = -1;  // unknown
+		refreshingData = true;
+		UpdateUI();
+
+		nextRefreshSequence = 0;
+
+		ContinueRefreshSequence();
+	}
+
+	function RefreshData()
+	{
+		if (deviceTimeIntervalId != null)
+		{
+			window.clearInterval(deviceTimeIntervalId);
+			deviceTimeIntervalId = null;
+			deviceTime = null;
+		}
+
+		ClearForm();
+		GetData();
+	}
+
+	function ClearForm()
+	{
+		deviceStatusText.innerHTML = "";
+
+		deviceDateText.innerHTML = "";
+		deviceTimeText.innerHTML = "";
+
+		deviceWifiInfoText.innerHTML = "";
+		deviceCellularInfoText.innerHTML = "";
+
+		deviceBatteryLevelText.innerHTML = "";
+
+        onlineStatusImage.style = "-webkit-filter: grayscale(100%); filter: grayscale(100%)";
+        capturingStatusImage.style = "-webkit-filter: grayscale(100%); filter: grayscale(100%)";
+        uploadingStatusImage.style = "-webkit-filter: grayscale(100%); filter: grayscale(100%)";
+        streamingStatusImage.style = "-webkit-filter: grayscale(100%); filter: grayscale(100%)";
+
+		deviceStorageInfoText.innerHTML = "";
+
+		videoFormatText.innerHTML = "";
+
+		videoTableRows.innerHTML = "";
+
+		deviceTimeIntervalId = null;
+		deviceTime = null;
+		deviceTimeAcquired = null;
+		deviceIpConfig = null;
+	}
+
+    /* initialize this form
+    */
+    function initDeviceManagerForm()
+	{
+        // set done/refresh buttons to enabled
+        refreshButton = document.getElementById('devicestatusrefreshbtn');
+        setIpConfigButton = document.getElementById('ipconfigbtn');
+
+		deviceStatusText = document.getElementById("deviceStatusText");
+		deviceDateText = document.getElementById("deviceDateText");
+		deviceTimeText = document.getElementById("deviceTimeText");
+		deviceBatteryLevelText = document.getElementById("deviceBatteryLevelText");
+		deviceStorageInfoText = document.getElementById("deviceStorageInfoText");
+		deviceWifiInfoText = document.getElementById("deviceWifiInfotext");
+		videoFormatText = document.getElementById("videoFormatText");
+		deviceCellularInfoText = document.getElementById("deviceCellularInfotext");
+		onlineStatusImage = document.getElementById("devstatus-online-img");
+		capturingStatusImage = document.getElementById("devstatus-capturing-img");
+		uploadingStatusImage = document.getElementById("devstatus-uploading-img");
+		streamingStatusImage = document.getElementById("devstatus-streaming-img");
+
+		videoTableRows = document.getElementById("videotablerows");
+
+		kamPlayVideoElement = document.getElementById("kamPlayVideo");
+		kamVideoSegmentsElement = document.getElementById("kamVideoSegments");
+
+		// initDeviceMessageDialog();
+		// initPlayVideoDialog();
+		// initIpConfigDialog();
+		// initErrorMessageDialog();
+
+		// RefreshData();
+    }
+
+    /* initialize placeholder jquery dialog 
+    */
+    function initDeviceMessageDialog() {
+        $("#dialog-devicemessage").dialog({
+            resizable: false,
+            dialogClass: "no-close",
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+    }
+
+    /* we're done here, close form and go back to jobManagerForm
+    */
+    function closeDeviceManagement() {
+        $(".devices-content").fadeToggle("fast");
+        openHomeView();
+    }
+
+	function SetDeviceIpConfig()
+	{
+		var ipv4address = $("#ipconfig-ipv4address").val();
+		var port = $("#ipconfig-port").val();
+
+		deviceIpConfig = {ipv4address: ipv4address, port: port};
+
+		DeviceUpdate(
+				1,
+				null,
+				null,
+				null,
+				null,
+				null,
+				null,
+				ipv4address,
+				port,
+				OnDeviceUpdateComplete,
+				null
+				);
+
+		closeIpConfigDialog();
+	}
+
+    /* initialize placeholder jquery dialog 
+    */
+    function initIpConfigDialog() {
+        $("#dialog-ipconfig").dialog({
+            resizable: false,
+            dialogClass: "no-close",
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+    }
+
+    /* open IP Config dialog
+    */
+    function openIpConfigDialog()
+	{
+		if (deviceIpConfig != null)
+		{
+			document.getElementById("ipconfig-ipv4address").value = deviceIpConfig.ipv4address;
+			document.getElementById("ipconfig-port").value = deviceIpConfig.port;
+		}
+
+        $("#dialog-ipconfig").dialog("open");
+    }
+
+    /* cancel IP Config dialog
+    */
+    function closeIpConfigDialog()
+	{
+        // close dialog
+        $("#dialog-ipconfig").dialog("close");
+    }
+
+    /* initialize placeholder jquery dialog 
+    */
+    function initErrorMessageDialog() {
+        $("#dialog-errormessage").dialog({
+            resizable: false,
+            dialogClass: "no-close",
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+    }
+
+    /* open Error Message dialog
+    */
+    function openErrorMessageDialog(
+    	errorMessage,
+		resultString
+		)
+	{
+		document.getElementById("errormessage-errorfield").innerHTML = errorMessage;
+
+		if (resultString != undefined)
+		{
+			document.getElementById("errormessage-resultstring").innerHTML = resultString;
+		}
+
+		$("#dialog-errormessage").dialog("open");
+    }
+
+    /* cancel Error Message dialog
+    */
+    function closeErrorMesssageDialog()
+	{
+        // close dialog
+        $("#dialog-errormessage").dialog("close");
+    }
+
+    /*Initalizes the Google Map UI component*/
+    function initGoogleMap()
+    {
+        // var mapStyles = [
+        //     {
+        //         featureType: "poi",
+        //         stylers: [
+        //             { visibility: "off" }
+        //         ]
+        //     },
+        //     {
+        //         featureType: "road",
+        //         elementType: "geometry",
+        //         stylers: [
+        //             { lightness: 100 },
+        //             { hue: "#00ffe6" },
+        //             { visibility: "simplified" },
+        //             { saturation: -20 }
+        //         ]
+        //     }
+        // ];
+
+        // googleMap = new google.maps.Map(document.getElementById('googleMap'), {
+        //     center: new google.maps.LatLng(0, 0),
+        //     zoom: 18,
+        //     mapTypeControlOptions: {
+        //       mapTypeIds: [google.maps.MapTypeId.ROADMAP, google.maps.MapTypeId.SATELLITE]
+        //     }
+        // });
+        
+        // googleMap.setOptions({styles: mapStyles});
+    }
+
+    /* initialize this form
+    */
+    function initVideoJobsites()
+    {
+        initCreateVideoJobsiteDialog();
+        initVideoJobsiteTableSort();
+        initVideoJobsiteRowSelect();
+        initVideoAcknowledgeDeleteDialog();
+        initUploadVideo();
+        initGetUserCounts();
+        initVideoFileClicker();
+        initDeviceManagerForm();
+    }
+    /* initialize getUserCounts dialog
+    */
+    function initGetUserCounts() {
+        $("#dialog-usercounts").dialog({
+            resizable: false,
+            dialogClass: "no-close", 
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+    }
+    /* initialize uploadVideo dialog
+    */
+    function initUploadVideo() {
+        $("#dialog-uploadvideo").dialog({
+            resizable: false,
+            dialogClass: "no-close",
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+    }
+
+    /* open uploadVideo dialog
+    */
+    function openUploadVideoDialog(startDate, startTime, selectedFiles, totalPayloadSize)
+    {
+        var numSegments;
+
+        document.getElementById('videostarttime').innerHTML = startDate;
+		document.getElementById('vtime').value = startTime; /*added */
+
+        totalPayloadSize = parseFloat(totalPayloadSize/1048576).toFixed(2);
+        document.getElementById('totaluploadfilesize').innerHTML = addCommas(totalPayloadSize) + "MB";
+
+        var videoName = "";
+        $('#videosetname').val(videoName);
+
+        var uploadVideoSetButton = document.getElementById('uploadvideoset');
+        uploadVideoSetButton.disabled = true;
+        uploadVideoSetButton.onclick = function()
+        {
+			var newDate = document.getElementById('vtime').value; /*added */
+			startDate=startDate+" "+newDate; /*added */
+			//console.log(startDate);
+            if (validateUploadVideoContent())
+            {
+                // begin upload
+                beginVideoUpload(readCookie("currentjobsiteid"), selectedFiles, videoName, cameraLocation, startDate, numSegments);
+
+                // close uploadVideo dialog
+                cancelUploadVideoDialog();
+            }
+        };
+
+        updateVideoSetTableRows = function()
+        {
+            videoName = $('#videosetname').val();
+			var addtime = document.getElementById("vtime").value; /*added */
+			 numSegments =$( "#segmentduration" ).val(); /*added */
+           // var segmentduration = document.getElementById('segmentduration');
+           // numSegments = segmentduration.options[segmentduration.selectedIndex].value;
+            // delete any existing rows in table
+            var videostable = document.getElementById("videonamestable");
+            videostable.innerHTML = "";
+            
+            // determine resulting video names and duration, add each as a row in the table
+            var rem = selectedFiles.length % parseInt(numSegments, 10);
+            var numvideos = Math.floor(selectedFiles.length / parseInt(numSegments, 10));
+
+            if (rem)
+            {
+                numvideos ++;
+            }
+
+            var segmentstarttime = addtime; /*changed starttime as addtime */
+			//(segmentstarttime);
+            var segmentendtime = endtime(addtime, numSegments); /*changed starttime as addtime */
+            var duration = parseInt(numSegments, 10);
+            for (var i=0; i<numvideos; i++)
+            {
+                var row = videostable.insertRow(videostable.rows.length);
+                var cell = row.insertCell(0);
+
+                // if last video in set, adjust duration as necessary
+                if (i == numvideos-1 && rem)
+                {
+                    duration = rem;
+                }
+
+                segmentendtime = endtime(segmentstarttime, duration);
+                cell.innerHTML = videoName + "_" + segmentstarttime + "-" + segmentendtime;
+                cell = row.insertCell(1);
+                cell.innerHTML = duration + " hrs";
+
+                segmentstarttime = segmentendtime;
+            }
+        };
+
+        var cameraLocationDropdown = document.getElementById('cameralocation-dropdown');
+        cameraLocationDropdown.selectedIndex = 0;
+
+        var cameraLocationText = document.getElementById('cameralocation-text');
+        cameraLocationText.required = false;
+        cameraLocationText.disabled = true;
+
+        UpdateUploadButton = function()
+        {
+            // if videoName and cameraLocation != "", enable upload
+
+            videoName = $('#videosetname').val();
+
+            cameraLocation = cameraLocationDropdown.options[cameraLocationDropdown.selectedIndex].value;
+
+            if (cameraLocation === "other")
+            {
+                cameraLocation = cameraLocationText.value;
+            }
+
+            if (videoName.length && cameraLocation.length)
+            {
+                uploadVideoSetButton.disabled = false;
+            }
+            else
+            {
+                uploadVideoSetButton.disabled = true;
+            }
+        };
+
+        $("#cameralocation-dropdown").on(
+                'change keyup',
+                function()
+                {
+                    cameraLocation = cameraLocationDropdown.options[cameraLocationDropdown.selectedIndex].value;
+
+                    cameraLocationText.required = (cameraLocation === "other");
+                    cameraLocationText.disabled = (cameraLocation !== "other");
+
+                    if (cameraLocation === "other")
+                    {
+                        cameraLocationText.focus();
+                    }
+
+                    UpdateUploadButton();
+                }
+                );
+
+        $("#cameralocation-text").on(
+                'change keyup',
+                function()
+                {
+                    UpdateUploadButton();
+                }
+                );
+
+        // set change notification events
+        $("#videosetname").val(readCookie("currentjobnickname") + ": " + readCookie("currentjoboffice"));
+
+        updateVideoSetTableRows();
+		/* added vtime change functionality */
+		$("#vtime").change(
+		'input',
+		function()
+		{
+			videoName = $('#videosetname').val();
+			hrs = $('#segmentduration').val();
+			var vtime = document.getElementById('vtime');
+            nwtime = vtime.options[vtime.selectedIndex].value;
+			 var videostable = document.getElementById("videonamestable");
+			for (var i = 0; i<videostable.rows.length; i++)
+                    {
+                        var row = videostable.rows[i];
+                        var namestr = row.cells[0].innerHTML.split("_");
+                        var suffix = namestr[1];
+						var suffix1 = suffix.split("-");
+						//var suffix2 = suffix1[1].split(":");
+						var addhrs=nwtime.split(":");
+						if(Number(addhrs[0])<10)
+						{
+							var endvtime=Number(addhrs[0])+Number(hrs)+":"+addhrs[1];
+							endvtime=0+""+endvtime;
+						}
+						else
+						{
+							var endvtime=Number(addhrs[0])+Number(hrs)+":"+addhrs[1];
+						}
+                        row.cells[0].innerHTML = videoName + "_" +nwtime+"-"+endvtime;
+                    }
+
+		});
+		/*end of added vtime change functionality */
+        $("#videosetname").on(
+                'input',
+                function()
+                {
+                    videoName = $('#videosetname').val();
+
+                    // update the name prefix for the resulting videos in the table
+                    var videostable = document.getElementById("videonamestable");
+					 var addtime = document.getElementById("vtime").value;/* added  and changes done in for loop */
+                    for (var i = 0; i<videostable.rows.length; i++)
+                    {
+                        var row = videostable.rows[i];
+                        var namestr = row.cells[0].innerHTML.split("_");
+                        var suffix = namestr[namestr.length-1];
+						var suffix1 = suffix.split("-");
+                        row.cells[0].innerHTML = videoName + "_" +addtime+"-"+suffix1[1];
+                    }
+                    UpdateUploadButton();
+                }
+                );
+
+        $("#segmentduration").change(updateVideoSetTableRows);
+        // open videoupload form
+        $("#dialog-uploadvideo").dialog("open");
+    }
+
+    /* cancel uploadVideo dialog
+    */
+    function cancelUploadVideoDialog()
+    {
+        // close dialog
+        $("#dialog-uploadvideo").dialog("close");
+
+        // call openJobsiteManager to reinit this page
+        openJobsiteManager();
+    }
+
+    /* upload video to server
+    */
+    function validateUploadVideoContent()
+    {
+        var errorfield = document.getElementById('videoupload-errorfield');
+
+        // check for valid input fields
+        var videoName = document.getElementById('videosetname').value;
+
+        cameraLocationDropdown = document.getElementById('cameralocation-dropdown');
+        cameraLocation = cameraLocationDropdown.options[cameraLocationDropdown.selectedIndex].value;
+
+        if (cameraLocation === "other")
+        {
+            cameraLocation = document.getElementById('cameralocation-text').value;
+        }
+
+        if (typeof videoName === 'undefined' || videoName === null || videoName === "")
+        {
+            errorfield.style.color = "#b5535f";
+            errorfield.innerHTML = "Error: Video name/description is required";
+            return false;
+        }
+        else if (typeof cameraLocation === 'undefined' || cameraLocation === null || cameraLocation === "")
+        {
+            errorfield.style.color = "#b5535f";
+            errorfield.innerHTML = "Error: Camera location is required";
+            return false;
+        }
+
+        return true;
+    }
+
+    /* initialize file picker
+    */
+    function initVideoFileClicker()
+    {
+        var vfileSelect = document.getElementById("uploadvideobtn"),
+        vfileElem = document.getElementById("videoFileElem");
+
+        vfileSelect.addEventListener("click", function (e) {
+            if (vfileElem) {
+                vfileElem.click();
+            }
+            e.preventDefault(); // prevent navigation propagation
+        }, false);
+    }
+
+    /* file picker handler
+    */
+    function handleVideoFiles(files)
+    {
+        // validate, sort and save off files
+        var selectedFiles = validVideoFileSet(files);
+
+        if (selectedFiles.length)
+        {
+            // determine totalpayloadsize and startDate from first file in sequence
+            var startDate;
+            var startTime;
+            var totalPayloadSize = 0;
+            var smallestfileno = "";
+            var i;
+            var file;
+
+            for (i=0; file=selectedFiles[i]; i++)
+            {
+                totalPayloadSize += file.size;
+
+                // get startDate and starttime from filename suffix
+                var fileparts = file.name.split(".");
+                var fileno = fileparts[fileparts.length-2];
+
+                if ((fileno < smallestfileno) || (smallestfileno === ""))
+                {
+                    smallestfileno = fileno;
+                    var dateparts = fileparts[0].split("_");
+                    var datepart = dateparts[dateparts.length-2];
+                    var timepart = dateparts[dateparts.length-1];
+                    startTime = timepart.substring(0, 2) + ":" + timepart.substring(2, 4);
+                    //startDate = datepart + " " + startTime;
+					startDate = datepart; /* changed */
+                }
+            }
+
+            // populate jobsite detail in dialog
+            var jobsiteId = readCookie("currentjobsiteid");
+            var jobsiteLocation;
+            var jobsiteSitecode;
+            var table = document.getElementById("videojobsitestablerows");
+
+            for (i = 0; i<table.rows.length; i++)
+            {
+                var row = table.rows[i];
+                var cell = row.cells[0];
+                var cellid = cell.getAttribute("id");
+
+                if (cellid == jobsiteId)
+                {
+                    document.getElementById('videojobsite').innerHTML = row.cells[0].innerHTML;
+                    document.getElementById('videodescription').innerHTML = row.cells[1].innerHTML;
+                    break;
+                }
+            }
+
+            // open videoupload form
+            openUploadVideoDialog(startDate, startTime, selectedFiles, totalPayloadSize);
+        }
+        else
+        {
+            showErrorDialog("No valid files selected, expected:\nsomeprefix_xxxx-xx-xx-xxxx.00{m}.mp4\n...\nsomeprefix_xxxx-xx-xx-xxxx.00{m+n}.mp4");
+            // call openJobsiteManager to reinit this page
+            openJobsiteManager();
+        }
+    }
+
+    /* function determines the endtime accounting for 24 hour clock
+    */
+    function endtime(addtime, duration) { //moulika changed starttime to addtime
+        var prefixstr = addtime.split(":");
+        var prefix = prefixstr[0];
+        var endtime = (parseInt(prefix, 10) + duration) % 24;
+        return  str_pad_left(endtime, '0', 2) + ":" + prefixstr[1];
+    }
+
+    /* initialize placeholder jquery dialog
+    */
+    function initCreateVideoJobsiteDialog() {
+        $("#dialog-createvideojobsite").dialog({
+            resizable: false,
+            dialogClass: "no-close",
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+        $("#videojobsite-sitecode").on('input', resetVideoJobsiteErrorField);
+        $("#videojobsite-location").on('input', resetVideoJobsiteErrorField);
+
+        // // Restore the user's last view (map or videos).  If not set, then default to
+        // // map view.
+        // var jobSiteMode = readCookie("jobsite-mode");
+
+        // if (jobSiteMode == "videos")
+        // {
+        //     setViewMode("videos");
+        // }
+        // else
+        // {
+        //     setViewMode("map");
+        // }
+
+        setViewMode("videos");
+    }
+
+    function setViewMode(mode)
+    {
+        var jobsiteId = readCookie("currentjobsiteid");
+        var jobsiteMapDiv = document.getElementById("jobsite-map");
+        var viewVideosButton = document.getElementById("viewvideos");
+        var jobsiteVideosDiv = document.getElementById("jobsite-videos");
+        //var viewDevicesButton = document.getElementById("viewdevices");
+
+        createCookie("jobsite-mode", mode);
+
+        if (mode == "devices")
+        {
+            jobsiteMapDiv.style.display = "block";
+            jobsiteVideosDiv.style.display = "none";
+            //viewDevicesButton.style.color = "#000000";
+            viewVideosButton.style.color = "#0065ca";
+
+            if (typeof jobsiteId !== 'undefined')
+            {
+                showDevices(jobsiteId);
+            }
+        }
+        else if (mode == "videos")
+        {
+            jobsiteMapDiv.style.display = "none";
+            jobsiteVideosDiv.style.display = "block";
+            //viewDevicesButton.style.color = "#0065ca";
+            viewVideosButton.style.color = "#000000";
+
+            if ((typeof jobsiteId !== 'undefined') && (jobsiteId !== null))
+            {
+                showVideoList(jobsiteId);
+            }
+        }
+    }
+
+    function viewDevices()
+    {
+        setViewMode("devices");
+    }
+
+    function viewVideos()
+    {
+        setViewMode("videos");
+    }
+
+    /* initialize placeholder acknowledge close job dialog
+    */
+    function initVideoAcknowledgeDeleteDialog() {
+        $("#dialog-videoacknowledgedelete").dialog({
+            resizable: false,
+            dialogClass: "no-close",
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+    }
+    function openVideoAcknowledgeDelete() {
+        $("#dialog-videoacknowledgedelete").dialog("open");
+    }
+    function cancelVideoDelete() {
+        // close dialog
+        $("#dialog-videoacknowledgedelete").dialog("close");
+    }
+
+    /* delete the current jobsite
+    */
+    function deleteVideoJobsite() {
+        var authToken = readCookie("authToken");
+        var jobsiteid = readCookie("currentjobsiteid");
+        var paramsString = METHODCALL_HEADER_PARAM_AUTHTOKEN + "=" + authToken + "&jobsiteid=" + jobsiteid;
+        $.ajax({
+            type: "GET",
+            url: "MethodCall.php/JobManager::DeleteJobSite",
+            data: paramsString,
+            dataType: "html",
+            cache: false,
+            success: function(result) {
+                jsonResponse = JSON.parse(result);
+                var response = jsonResponse['results']['response'];
+                if (response == "success") {
+                    // close acknowledge dialog
+                    $("#dialog-videoacknowledgedelete").dialog("close");
+
+                    // remove selected row from table, clear Current Jobsite 
+                    clearCurrentVideoJobsite();
+                }
+                else {
+                    if (jsonResponse['results']['returnval']['resultstring'] == "login required") {
+                        // close this form, inform user and logout
+                        loginRequired();
+
+                        // close dialog
+                        $("#dialog-videoacknowledgedelete").dialog("close");
+                    }
+                    else {
+                        showErrorDialog("Unknown server error, please try again");
+                    }
+                }
+            },
+            error: function (request, status, error) {
+                showErrorDialog("Server error: " + status);
+            }
+        });
+    }
+
+    /* clear the current job
+    */
+    function clearCurrentVideoJobsite() {
+        var jobsiteId = readCookie("currentjobsiteid");
+
+        // erase currentjob cookies
+        eraseCookie("currentjobsiteid");
+
+        // remove selected row from table
+        var table = document.getElementById("videojobsitestablerows");
+        for (var i = 0; i<table.rows.length; i++) {
+            var row = table.rows[i];
+            var cell = row.cells[0];
+            var cellid = cell.getAttribute("id");
+            // if a match delete row
+            if (cellid == jobsiteId) {
+                table.deleteRow(row.rowIndex);
+
+                // Set selection on row above deleted row
+                if (i > 0)
+                {
+                    setCurrentVideoJobSite(row.cells[i-0].getAttribute("id"));
+                }
+                else
+                {
+                    setCurrentVideoJobSite(row.cells[0].getAttribute("id"));
+                }
+            }
+        }
+    }
+
+    /* initialize rowselect function
+    */
+    function initVideoJobsiteRowSelect() {
+        $('#videojobsitestablerows tbody tr').click(function() {
+            var tr = $(this).closest('tr');
+            var jobsiteid = $(tr).find('td').eq(0).attr("id");
+
+            // set current job and highlight selection
+            setCurrentVideoJobsite(jobsiteid);
+        });
+    }
+
+    /* function sets the page's Current Jobsite to reflect the selected row in the table
+    */
+    function setCurrentVideoJobsite(jobsiteId)
+    {
+        // highlight selected row and unhighlight previous selected row
+        var table = document.getElementById("videojobsitestablerows");
+
+        showVideoList(jobsiteId);
+        showDevices(jobsiteId);
+
+        for (var i = 0; i<table.rows.length; i++)
+        {
+            var row = table.rows[i];
+            var cell = row.cells[0];
+            var cellid = cell.getAttribute("id");
+            var issel = cell.getAttribute("data-selected");
+
+            // if not a match 
+            if (cellid != jobsiteId)
+            {
+                cell.setAttribute("data-selected", false);
+
+                row.style.color = "#000000";
+                row.style.backgroundColor = '';
+            }
+            // else if a match
+            else
+            {
+                createCookie("currentjobsiteid", jobsiteId);
+
+                cell.setAttribute("data-selected", true);
+
+                row.style.color = "#ffffff";
+                row.style.backgroundColor = "#0065ca";
+
+                // enable buttons that act on a selected job
+                document.getElementById('editvideojobsitebtn').disabled = false;
+                document.getElementById('deletevideojobsitebtn').disabled = false;
+                document.getElementById('uploadvideobtn').disabled = false;
+
+                // if there are videos, enable get counts button
+                if (row.cells[4].innerHTML != "0") {
+                    document.getElementById('getusercountsbtn').disabled = false;
+                } else {
+                    document.getElementById('getusercountsbtn').disabled = true;
+                }
+            }
+        }
+    }
+    /* open createNewJobsite dialog
+    */
+    function createNewVideoJobsite()
+    {
+        document.getElementById('videojobsite-submitbtn').disabled = false;
+
+        $("#videojobsite-sitecode").val(readCookie("currentjobnickname") + ": " + readCookie("currentjoboffice"));
+        $("#videojobsite-location").val("");
+        $("#videojobsite-nstreet").val("");
+        $("#videojobsite-sstreet").val("");
+        $("#videojobsite-estreet").val("");
+        $("#videojobsite-wstreet").val("");
+        $("#videojobsite-nestreet").val("");
+        $("#videojobsite-nwstreet").val("");
+        $("#videojobsite-sestreet").val("");
+        $("#videojobsite-swstreet").val("");
+        resetVideoJobsiteErrorField();
+
+        document.getElementById('jobsite-createheader').innerHTML = "Create New Job Site";
+        $("#dialog-createvideojobsite").dialog("open");
+
+        $("#videojobsite-nstreet").on('change keyup', function() { $("#videojobsite-sstreet").val($("#videojobsite-nstreet").val()); });
+        $("#videojobsite-estreet").on('change keyup', function() { $("#videojobsite-wstreet").val($("#videojobsite-estreet").val()); });
+        $("#videojobsite-nestreet").on('change keyup', function() { $("#videojobsite-swstreet").val($("#videojobsite-nestreet").val()); });
+        $("#videojobsite-nwstreet").on('change keyup', function() { $("#videojobsite-sestreet").val($("#videojobsite-nwstreet").val()); });
+
+        $("#videojobsite-submitbtn").on('click', function(){ validVideoJobsiteInputs(true); });
+    }
+
+    /* open createNewJobsite dialog in edit mode
+    */
+    function editVideoJobsite()
+    {
+        var jobsite = null;
+
+        document.getElementById('videojobsite-submitbtn').disabled = true;
+
+        // Find the selected row
+        var table = document.getElementById("videojobsitestablerows");
+        var selectedRow;
+
+        for (var i = 0; i<table.rows.length; i++)
+        {
+            var row = table.rows[i];
+            var cell = row.cells[0];
+            var cellid = cell.getAttribute("id");
+            var issel = cell.getAttribute("data-selected");
+
+            if (issel === "true")
+            {
+                jobsite = JSON.parse(cell.getAttribute("data-jobsite"));
+                selectedRow = i;
+                break;
+            }
+        }
+
+        var priority = document.getElementById('countpriority');
+
+        $("#videojobsite-sitecode").val(jobsite.sitecode);
+        $("#videojobsite-location").val(jobsite.description);
+        $("#videojobsite-nstreet").val(jobsite.n_street);
+        $("#videojobsite-sstreet").val(jobsite.s_street);
+        $("#videojobsite-estreet").val(jobsite.e_street);
+        $("#videojobsite-wstreet").val(jobsite.w_street);
+        $("#videojobsite-nestreet").val(jobsite.ne_street);
+        $("#videojobsite-nwstreet").val(jobsite.nw_street);
+        $("#videojobsite-sestreet").val(jobsite.se_street);
+        $("#videojobsite-swstreet").val(jobsite.sw_street);
+
+        priority.selectedIndex = parseInt(jobsite.countpriority, 10) - 1;
+
+        resetVideoJobsiteErrorField();
+
+        document.getElementById('jobsite-createheader').innerHTML = "Edit Job Site";
+        $("#dialog-createvideojobsite").dialog("open");
+
+        enableSubmitOnChange = function()
+        {
+            var priority = document.getElementById('countpriority');
+
+            if (($("#videojobsite-sitecode").val() != jobsite.sitecode)
+                    || ($("#videojobsite-location").val() != jobsite.description)
+                    || ($("#videojobsite-nstreet").val() != jobsite.n_street)
+                    || ($("#videojobsite-sstreet").val() != jobsite.s_street)
+                    || ($("#videojobsite-estreet").val() != jobsite.e_street)
+                    || ($("#videojobsite-wstreet").val() != jobsite.w_street)
+                    || ($("#videojobsite-nestreet").val() != jobsite.ne_street)
+                    || ($("#videojobsite-nwstreet").val() != jobsite.nw_street)
+                    || ($("#videojobsite-sestreet").val() != jobsite.se_street)
+                    || ($("#videojobsite-swstreet").val() != jobsite.sw_street)
+                    || (priority.options[priority.selectedIndex].value != jobsite.countpriority))
+            {
+                document.getElementById('videojobsite-submitbtn').disabled = false;
+            }
+            else
+            {
+                document.getElementById('videojobsite-submitbtn').disabled = true;
+            }
+        };
+
+        //
+        // For changes to north, east, northeast, and northwest, set their opposites (south, west, southwest, and southeast respectively) to the same value.
+        // And for all changes to the form, determine if the Submit button should be enabled or disabled.
+        //
+        $("#videojobsite-sitecode").on('change keyup', enableSubmitOnChange);
+        $("#jovideojobsite-location").on('change keyup', enableSubmitOnChange);
+        $("#videojobsite-nstreet").on('change keyup', function() { $("#videojobsite-sstreet").val($("#videojobsite-nstreet").val()); enableSubmitOnChange(); });
+        $("#videojobsite-sstreet").on('change keyup', enableSubmitOnChange);
+        $("#videojobsite-estreet").on('change keyup', function() { $("#videojobsite-wstreet").val($("#videojobsite-estreet").val()); enableSubmitOnChange(); });
+        $("#videojobsite-wstreet").on('change keyup', enableSubmitOnChange);
+        $("#videojobsite-nestreet").on('change keyup', function() { $("#videojobsite-swstreet").val($("#videojobsite-nestreet").val()); enableSubmitOnChange(); });
+        $("#videojobsite-nwstreet").on('change keyup', function() { $("#videojobsite-sestreet").val($("#videojobsite-nwstreet").val()); enableSubmitOnChange(); });
+        $("#videojobsite-sestreet").on('change keyup', enableSubmitOnChange);
+        $("#videojobsite-swstreet").on('change keyup', enableSubmitOnChange);
+        $("#countpriority").on('change keyup', enableSubmitOnChange);
+
+        $("#videojobsite-submitbtn").on('click', function(){ validVideoJobsiteInputs(false, selectedRow); });
+
+        $("#dialog-createvideojobsite").dialog("open");
+    }
+
+    /* cancel openNewJobsite dialog
+    */
+    function cancelNewVideoJobsiteDialog() {
+        // close dialog
+        $("#dialog-createvideojobsite").dialog("close");
+    }
+
+    /* validate inputs, and if valid post createNewJob inputs
+    */
+    function validVideoJobsiteInputs(forCreateJobSite, selectedRow)
+    {
+        var errorfield = document.getElementById('videojobsite-errorfield');
+
+        // check for valid input fields
+        var jobsitecode = document.getElementById('videojobsite-sitecode').value;
+        var jobsitelocation = document.getElementById('videojobsite-location').value;
+
+        if (typeof jobsitecode === 'undefined' || jobsitecode === null || jobsitecode === "")
+        {
+            errorfield.style.color = "#b5535f";
+            errorfield.innerHTML = "Error: sitecode is required.";
+            return false;
+        }
+        // valid inputs, proceed with call to server
+        else
+        {
+            var priority = document.getElementById('countpriority');
+            var countpriority = priority.options[priority.selectedIndex].value;
+	    var status="NO LAYOUTS";
+
+            jobsiteInfo =
+            {
+                jobid: readCookie('currentjobid'),
+                jobsiteid: 0,
+                sitecode: jobsitecode,
+                description: jobsitelocation, 
+                n_street: $("#videojobsite-nstreet").val(),
+                s_street: $("#videojobsite-sstreet").val(),
+                e_street: $("#videojobsite-estreet").val(),
+                w_street: $("#videojobsite-wstreet").val(),
+                ne_street: $("#videojobsite-nestreet").val(),
+                nw_street: $("#videojobsite-nwstreet").val(),
+                se_street: $("#videojobsite-sestreet").val(),
+                sw_street: $("#videojobsite-swstreet").val(),
+                countpriority: countpriority
+            };
+
+            if (forCreateJobSite)
+            {
+                JobCreateJobSite(
+                        jobsiteInfo.jobid,
+                        jobsitecode,
+                        null, //latitude,
+                        null, //longitude,
+                        jobsitelocation, //description
+                        null, //notes
+                        $("#videojobsite-nstreet").val(),
+                        $("#videojobsite-sstreet").val(),
+                        $("#videojobsite-estreet").val(),
+                        $("#videojobsite-wstreet").val(),
+                        $("#videojobsite-nestreet").val(),
+                        $("#videojobsite-nwstreet").val(),
+                        $("#videojobsite-sestreet").val(),
+                        $("#videojobsite-swstreet").val(),
+                        null, //direction
+                        null, //oneway
+                        countpriority,
+                        null, //reportformat
+                        null, //reportparameters
+			status,
+                        function(context, textStatus, response, jobsiteid, resultstring)
+                        {
+                            if ((textStatus === "success") && (response === "success"))
+                            {
+                                jobsiteInfo.jobsiteid = jobsiteid;
+
+                                // add new jobsite row to table
+                                var currentDate = Date();
+                                currentDate = $.datepicker.formatDate("yy-mm-dd", new Date(currentDate));
+
+                                // populate each column in jobs table
+                                var jobsitestable = document.getElementById('videojobsitestablerows');
+                                var row = jobsitestable.insertRow(0);
+                                var cell = row.insertCell(0);
+                                cell.innerHTML = jobsitecode;
+                                cell.setAttribute("id", jobsiteid);
+                                cell.setAttribute("data-selected", false);
+                                cell.setAttribute("data-jobsite", JSON.stringify(jobsiteInfo));
+                                cell = row.insertCell(1);
+                                cell.innerHTML = jobsitelocation;
+                                cell = row.insertCell(2);
+                                cell.innerHTML = currentDate;
+                                cell = row.insertCell(3);
+                                cell.innerHTML = countpriority;
+                                cell = row.insertCell(4);
+                                cell.innerHTML = "0";
+                                cell = row.insertCell(5);
+                                cell.innerHTML = "0";
+				cell = row.insertCell(6);
+                                cell.innerHTML = status;
+
+                                // close dialog
+                                $("#dialog-createvideojobsite").dialog("close"); 
+
+                                // reinit jobselect to capture the new row
+                                initVideoJobsiteRowSelect();
+                            }
+                            else
+                            {
+                                if (resultstring === "login required")
+                                {
+                                    // close this form, inform user and logout
+                                    loginRequired();
+
+                                    // close dialog
+                                    $("#dialog-createvideojobsite").dialog("close");
+                                } 
+                                else if (resultstring === "alreadyexists")
+                                {
+                                    errorfield.style.color = "#b5535f";
+                                    errorfield.innerHTML = "A jobsite with this sitecode already exists";
+                                }
+                                else
+                                {
+                                    errorfield.style.color = "#b5535f";
+                                    errorfield.innerHTML = "Server error response: " + resultstring;
+                                }
+                            }
+                        },
+                        null//context
+                        );
+            }
+            else
+            {
+                JobSiteUpdate(
+                        readCookie('currentjobsiteid'),
+                        jobsitecode,
+                        null, //latitude
+                        null, //longitude
+                        null, //setupdate
+                        null, //durations
+                        null, //timeblocks
+                        null, //taskstatus
+                        jobsitelocation, //description
+                        null, //notes
+                        $("#videojobsite-nstreet").val(),
+                        $("#videojobsite-sstreet").val(),
+                        $("#videojobsite-estreet").val(),
+                        $("#videojobsite-wstreet").val(),
+                        $("#videojobsite-nestreet").val(),
+                        $("#videojobsite-nwstreet").val(),
+                        $("#videojobsite-sestreet").val(),
+                        $("#videojobsite-swstreet").val(),
+                        null, //direction
+                        null, //oneway
+                        countpriority,
+                        null, //reportformat
+                        null, //reportparameters
+                        function(context, textStatus, response, jobsiteid, resultstring)
+                        {
+                            if ((textStatus === "success") && (response === "success"))
+                            {
+                                // add new jobsite row to table
+                                var currentDate = Date();
+                                currentDate = $.datepicker.formatDate("yy-mm-dd", new Date(currentDate));
+
+                                // populate each column in jobs table
+                                var jobsitestable = document.getElementById('videojobsitestablerows');
+                                var row = jobsitestable.rows[selectedRow];
+                                var cell = row.cells[0];
+
+                                cell.innerHTML = jobsitecode;
+                                cell.setAttribute("data-jobsite", JSON.stringify(jobsiteInfo));
+                                cell = row.cells[1];
+                                cell.innerHTML = jobsitelocation;
+                                cell = row.cells[2];
+                                cell.innerHTML = currentDate;
+                                cell = row.cells[3];
+                                cell.innerHTML = countpriority;
+                                
+
+                                // close dialog
+                                $("#dialog-createvideojobsite").dialog("close"); 
+
+                                // reinit jobselect to capture the new row
+                                initVideoJobsiteRowSelect();
+                            }
+                            else
+                            {
+                                if (resultstring === "login required")
+                                {
+                                    // close this form, inform user and logout
+                                    loginRequired();
+
+                                    // close dialog
+                                    $("#dialog-createvideojobsite").dialog("close");
+                                } 
+                                else if (resultstring === "alreadyexists")
+                                {
+                                    errorfield.style.color = "#b5535f";
+                                    errorfield.innerHTML = "A jobsite with this sitecode already exists";
+                                }
+                                else
+                                {
+                                    errorfield.style.color = "#b5535f";
+                                    errorfield.innerHTML = "Server error response: " + resultstring;
+                                }
+                            }
+                        },
+                        null//context
+                        );
+            }
+        }
+
+        return true;
+    }
+
+    /* initialize table sort function
+    */
+    function initVideoJobsiteTableSort() {
+        $('#sort-sitecode, #sort-location, #sort-updated, #sort-direction, #sort-priority, #sort-numvideos, #sort-numlayouts').click(function() {
+            var table = $("#videojobsitestablerows");
+            var rows = table.find('tr').toArray().sort(comparer($(this).index()));
+            this.asc = !this.asc;
+            if (!this.asc) {
+                rows = rows.reverse();
+            }
+            for (var i = 0; i < rows.length; i++) {
+                table.append(rows[i]);
+            }
+        });
+    }
+
+    /* done here, close this content and open job manager
+    */
+    function exitVideoJobsitesManager() {
+        // hide jobsiteManager
+        $(".jobsites-content").hide();
+
+        openJobManager();
+    }
+    function resetVideoJobsiteErrorField() {
+        var errorfield = document.getElementById('videojobsite-errorfield');
+        if (errorfield.innerText != "Enter new jobsite details") {
+            errorfield.style.color = "#000000";
+            errorfield.innerHTML = "Enter new jobsite details";
+        }
+    }
+    function resetVideoUploadErrorField() {
+        var errorfield = document.getElementById('videoupload-errorfield');
+        if (errorfield.innerText != "Enter new jobsite details") {
+            errorfield.style.color = "#000000";
+            errorfield.innerHTML = "Enter jobsite video information";
+        }
+    }
+
+    //  Generic event abstractor
+    function addEvent( obj, evt, fn )
+    {
+        if ( 'undefined' != typeof obj.addEventListener )
+        {
+            obj.addEventListener( evt, fn, false );
+        }
+        else if ( 'undefined' != typeof obj.attachEvent )
+        {
+            obj.attachEvent( "on" + evt, fn );
+        }
+    }
+
+    function showVideoList(
+        jobsiteid
+        )
+    {
+        var jobSiteInfo = null;
+
+        var displayVideoIngestionPhaseTooltip = function(videoIngestionPhases, totalIngestionTime) {
+            var toolTipHTML;
+
+            if (videoIngestionPhases.length > 0)
+            {
+                toolTipHTML = "<table style='font-size: .6em;'><tbody><thead><tr><th style='width: 100px'>Phase</th><th style='width: 125px; text-align: center'>Started</th><th style='text-align: center'>Duration</th></tr></thead>";
+
+                for (var i=0; i<videoIngestionPhases.length; i++)
+                {
+                    if (videoIngestionPhases[i].endtime != "0000-00-00 00:00:00")
+                    {
+                        toolTipHTML += "<tr><td>" + videoIngestionPhases[i].phase + "</td><td>" + videoIngestionPhases[i].starttime + "</td><td>" + videoIngestionPhases[i].duration + "</td></tr>";
+                    }
+                    else
+                    {
+                        toolTipHTML += "<tr><td>" + videoIngestionPhases[i].phase + "</td><td>" + videoIngestionPhases[i].starttime + "</td><td>" + "in progress" + "</td></tr>";
+                    }
+                }
+
+                toolTipHTML += "<tfoot><tr><td></td><td style='text-align: right'><strong>Total Duration: </strong></td><td><strong> " + totalIngestionTime + "</strong></td></tr></tbody></table>";
+            }
+            else
+            {
+                toolTipHTML = "no phases";
+            }
+
+            return toolTipHTML;
+        };
+
+        var videoRowHoverListener = {
+            addElem: function( elem, callback, videoIngestionPhases, delay )
+            {
+                var hoverTimer;
+
+                addEvent( elem, 'mouseover', function()
+                {
+                    hoverTimer = setTimeout( function() { callback(videoIngestionPhases); }, delay );
+                } );
+
+                addEvent( elem, 'mouseout', function()
+                {
+                    clearTimeout( hoverTimer );
+                } );
+            }
+        }
+
+        var updateVideoList = function()
+        {
+            // remove all previous rows in our videolist table
+            $("#videotablerows tr").remove();
+
+            var videotable = document.getElementById('videotablerows');
+
+            var videosfilesArr = jobSiteInfo.videodata;
+
+            if (videosfilesArr.length)
+            {
+                for (i=0; i<videosfilesArr.length; i++)
+                {
+                    // populate each column in videos table
+                    var row = videotable.insertRow(0);
+                    row.setAttribute("title", "tip");   // need to set the title attribute so that tooltips will work.
+                    row.setAttribute("data-tooltip", displayVideoIngestionPhaseTooltip(videosfilesArr[i].ingestionphases, videosfilesArr[i].ingestionduration));
+
+                    //videoRowHoverListener.addElem(row, displayVideoIngestionPhaseTooltip, videosfilesArr[i].ingestionphases, 1000);
+
+                    var cell = row.insertCell(0);
+                    cell.setAttribute("videoid", videosfilesArr[i].videoid);
+                    cell.setAttribute("data-bucketfilename", videosfilesArr[i].bucketfilename);
+
+                    if (videosfilesArr[i].testdata == "1")
+                    {
+                        cell.innerHTML = "*" + videosfilesArr[i].name;
+                    }
+                    else
+                    {
+                        cell.innerHTML = videosfilesArr[i].name;
+                    }
+
+                    cell = row.insertCell(1);
+                    cell.innerHTML = addCommas((videosfilesArr[i].filesize / 1048576).toFixed(2)) + " MB";
+
+                    cell = row.insertCell(2);
+                    cell.innerHTML = videosfilesArr[i].addedtime;
+
+                    cell = row.insertCell(3);
+                    cell.innerHTML = videosfilesArr[i].status;
+
+                    cell = row.insertCell(4);
+                    cell.innerHTML = videosfilesArr[i].ingestionduration;
+
+                    cell = row.insertCell(5);
+                    cell.innerHTML = videosfilesArr[i].layouts.length;
+                }
+
+                $("#videotablerows tr").each(
+                        function()
+                        {
+                            $(this).tooltip( { content: $(this).data("tooltip") } );
+                        }
+                        );
+            }
+        };
+
+        // call server to get list of available videos
+        var refreshVideoList = function()
+        {
+            JobSiteGetInfo(
+                    jobsiteid,
+                    INFO_LEVEL_FULL,
+                    function(context, textStatus, response, resultstring, jobinfo, jobsiteinfo)
+                    {
+                        if (response === "success")
+                        {
+                            jobSiteInfo = jobsiteinfo;
+
+                            updateVideoList();
+                        }
+                        else
+                        {
+                            if (resultstring == "login required")
+                            {
+                                // close this form, inform user and logout
+                                loginRequired();
+                            }
+                            else
+                            {
+                                showErrorDialog("Unknown server error");
+                            }
+                        }
+                    },
+                    jobsiteid
+                    );
+        };
+
+        var refreshButton = document.getElementById('videojobsite-refreshvideosbtn');
+        refreshButton.onclick = function() { refreshVideoList(); };
+
+        refreshVideoList();
+    }
+
+    function showDevices(
+        jobsiteid
+        )
+    {
+        jobSiteMarkerClickHandler = function(e, context)
+        {
+        };
+
+        deviceMarkerClickHandler = function(e, context)
+        {
+            console.log(context);
+            kamid = context.deviceid;
+            GetData();
+        };
+
+        // call server to get list of deployed devices
+        JobSiteGetInfo(
+                jobsiteid,
+                INFO_LEVEL_FULL,
+                function(context, textStatus, response, resultstring, jobinfo, jobsiteinfo)
+                {
+                    if (response === "success")
+                    {
+                        var centerPoint;
+                        var deployedDevices = jobsiteinfo.deployeddevices;
+                        var i;
+
+
+/*
+                        //
+                        // Create an array of all the lat/long for the devices and then get
+                        // the centerpoint.  If there are no devices, then just use the lat/long
+                        // of the job site.
+                        //
+                        if ((typeof deployedDevices !== "undefined")
+                                && (deployedDevices !== null)
+                                && (deployedDevices.length !== 0))
+                        {
+                            geoLocations = [];
+
+                            for (i=0; i<deployedDevices.length; i++)
+                            {
+                                geoLocations.push( { lat: deployedDevices[i].latitude, lng: deployedDevices[i].longitude } );
+                            }
+
+                            centerPoint = getLatLngCenter(geoLocations);
+                        }
+                        else
+                        {
+                            centerPoint = { lat: jobsiteinfo.latitude, lng: jobsiteinfo.longitude };
+                        }
+
+                        if (googleMap != null)
+                        {
+                            googleMap.setCenter(new google.maps.LatLng(centerPoint.lat, centerPoint.lng));
+                        }
+                        else
+                        {
+                            console.log("creating google map");
+                            var mapStyles =
+                            [
+                                {
+                                    featureType: "poi",
+                                    stylers:
+                                    [
+                                        { visibility: "off" }
+                                    ]
+                                },
+                                {
+                                    featureType: "road",
+                                    elementType: "geometry",
+                                    stylers:
+                                    [
+                                        { lightness: 100 },
+                                        { hue: "#00ffe6" },
+                                        { visibility: "simplified" },
+                                        { saturation: -20 }
+                                    ]
+                                }
+                            ];
+
+                            googleMap = new google.maps.Map(
+                                    document.getElementById('jobsiteinfo-left'),
+                                    {
+                                        center: new google.maps.LatLng(centerPoint.lat, centerPoint.lng),
+                                        zoom: 18,
+                                        draggable: false,
+                                        mapTypeControlOptions:
+                                        {
+                                            mapTypeIds: [google.maps.MapTypeId.ROADMAP, google.maps.MapTypeId.SATELLITE]
+                                        }
+                                    }
+                                    );
+                        }
+
+                        if ((jobsiteinfo.latitude !== null) && (jobsiteinfo.longitude !== null))
+                        {
+                            mapCreateMapRectangle(
+                                    googleMap,
+                                    new google.maps.LatLng(jobsiteinfo.latitude, jobsiteinfo.longitude),
+                                    jobSiteMarkerClickHandler,
+                                    { jobsiteid: jobsiteinfo.jobsiteid }
+                                    );
+                        }
+
+                        if ((typeof deployedDevices !== "undefined")
+                                && (deployedDevices !== null)
+                                && (deployedDevices.length !== 0))
+                        {
+                            for (i=0; i<deployedDevices.length; i++)
+                            {
+                                if ((deployedDevices[i].latitude !== null) && (deployedDevices[i].longitude !== null))
+                                {
+                                    mapCreateCircle(
+                                            googleMap,
+                                            new google.maps.LatLng(deployedDevices[i].latitude, deployedDevices[i].longitude),
+                                            deviceMarkerClickHandler,
+                                            { deviceid: deployedDevices[i].deviceid }
+                                            );
+                                }
+                            }
+                        }
+*/
+                    }
+                    else
+                    {
+                        if (resultstring == "login required")
+                        {
+                            // close this form, inform user and logout
+                            loginRequired();
+                        }
+                        else
+                        {
+                            showErrorDialog("Unknown server error");
+                        }
+                    }
+                },
+                jobsiteid
+                );
+    }
+
+    /* get user counts for all videos in a selected video jobsite
+    */
+    function getUserCounts()
+    {
+        // initialize and download dialog and show it
+        var userCountsLabel = document.getElementById('usercountslabel');
+
+        userCountsLabel.innerHTML = "Downloading user counts for videos";
+        $("#usercountsdonebtn").hide();
+        $("#dialog-usercounts").dialog("open");
+
+        var jobSiteid = readCookie('currentjobsiteid');
+        var authToken = readCookie("authToken");
+        var paramsString = METHODCALL_HEADER_PARAM_AUTHTOKEN + "=" + authToken + "&jobsiteid=" + jobSiteid;
+
+        $.ajax({
+            type: "GET",
+            url: "MethodCall.php/VideoJobSiteManager::GetUserCounts",
+            data: paramsString,
+            dataType: "html",
+            cache: false,
+            success: function(result) {
+                jsonResponse = JSON.parse(result);
+                var response = jsonResponse['results']['response'];
+                if (response == "success") {
+                    // alert(JSON.stringify(jsonResponse));
+                    // upon success, download the count files 
+                    downloadUserCounts(authToken, jobSiteid, jsonResponse['results']['returnval']['rawoutputfilenames']);
+                }
+                // else handle error for user 
+                else {
+                    $("#usercountsdonebtn").show();
+                    var resultString = jsonResponse['results']['returnval']['resultstring'];
+                    if (resultString == "login required") {
+                        // close this form, inform user and logout
+                        loginRequired();
+                        $("#dialog-usercounts").dialog("close");
+                    } else {
+                        $("#usercountsdonebtn").show();
+                        userCountsLabel.innerHTML = "Unable to retrieve counts: " + resultString;
+                    }
+                }
+            },
+            error: function (request, status, error) {
+                $("#dialog-usercounts").dialog("close");
+                showErrorDialog("Server error: " + status);
+            }
+        });
+    }
+
+    function downloadUserCounts(authToken, jobSiteid, outputFiles)
+    {
+        var userCountsLabel = document.getElementById('usercountslabel');
+
+        // highlight selected row and unhighlight previous selected row
+        var i;
+        var table = document.getElementById("videojobsitestablerows");
+
+        for (i = 0; i<table.rows.length; i++)
+        {
+            var row = table.rows[i];
+            var cell = row.cells[0];
+            var cellid = cell.getAttribute("id");
+            var siteCodeDescription = "";
+
+            // find selected row by jobsiteid
+            if (cellid == jobSiteid)
+            {
+                siteCodeDescription = row.cells[0].innerHTML + "_" + row.cells[1].innerHTML;
+                break;
+            }
+        }
+
+        if (siteCodeDescription !== "")
+        {
+            var paramsString = METHODCALL_HEADER_PARAM_AUTHTOKEN + "=" + authToken;
+            paramsString += "&packagename=" + siteCodeDescription;
+            paramsString += "&numfiles=" + outputFiles.length;
+
+            for (i=0; i<outputFiles.length; i++)
+            {
+                paramsString += "&file_" + i + "=" + outputFiles[i];
+            }
+
+            // call ajax function to zipreports
+            $.ajax({
+                type: "GET",
+                url: "UploadDownload/zipcounts.php",
+                data: paramsString,
+                dataType: "html",
+                cache: false,
+                success: function(result) {
+                    jsonResponse = JSON.parse(result);
+                    var response = jsonResponse['results']['response'];
+                    if (response == "success") {
+                        // call server to download the file
+                        window.location.href = 'UploadDownload/downloadcounts.php?file=' + jsonResponse['results']['returnval']['zipfilename'] + "&" + METHODCALL_HEADER_PARAM_AUTHTOKEN + "=" + authToken;
+                        userCountsLabel.innerHTML = "Downloading user counts for videos..completed.";
+                        $("#usercountsdonebtn").show();
+                    }
+                    // else handle error for user 
+                    else {
+                        $("#usercountsdonebtn").show();
+                        var resultString = jsonResponse['results']['returnval']['resultstring'];
+                        if (resultString == "login required") {
+                            // close this form, inform user and logout
+                            loginRequired();
+                            $("#dialog-usercounts").dialog("close");
+                        } else {
+                            $("#usercountsdonebtn").show();
+                            userCountsLabel.innerHTML = "Unable to download counts: " + resultString;
+                        }
+                    }
+                },
+                error: function (request, status, error) {
+                    $("#dialog-usercounts").dialog("close");
+                    showErrorDialog("Server error: " + status);
+                }
+            });
+        }
+    }
+
+    function closeUserCounts() {
+        $("#dialog-usercounts").dialog("close");
+    }
+
+ </script>
+
+<!-- placeholder for download counts dialog -->
+<div class="dialog-overlay" id="dialog-usercounts">
+  <div class="dialog-wrapper">
+    <div class="dialog-content">
+      <h2>User Counts </h2>
+      <br />
+      <fieldset>
+        <label><span id="usercountslabel">Downloading user counts for videos</span></label>
+      </fieldset>
+      <br />
+      <div id="dlgbuttons">
+        <button id="usercountsdonebtn" onclick="closeUserCounts()">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- placeholder for uploadVideo dialog -->
+<div class="dialog-overlay" id="dialog-uploadvideo">
+  <div class="dialog-wrapper">
+    <div class="dialog-content">
+      <h2>Upload Video</h2>
+      <br />
+      <div id="videoupload-errorfield">Enter jobsite video information</div>
+      <fieldset>
+        <table>
+          <tr><td>Jobsite:</td><td><span id="videojobsite"></span></td></tr>
+          <tr><td>Description:</td><td><span id="videodescription"></span></td></tr>
+          <tr><td>Video capture start:</td><td><span id="videostarttime"></span>
+          <select id="vtime">
+          <option value="01:00">01:00</option>
+          <option value="01:30">01:30</option>
+          <option value="02:00">02:00</option>
+          <option value="02:30">02:30</option>
+          <option value="03:00">03:00</option>
+          <option value="03:30">03:30</option>
+          <option value="04:00">04:00</option>
+          <option value="04:30">04:30</option>
+          <option value="05:00">05:00</option>
+          <option value="05:30">05:30</option>
+          <option value="06:00">06:00</option>
+          <option value="06:30">06:30</option>
+          <option value="07:00">07:00</option>
+          <option value="07:30">07:30</option>
+          <option value="08:00">08:00</option>
+          <option value="08:30">08:30</option>
+          <option value="09:00">09:00</option>
+          <option value="09:30">09:30</option>
+          <option value="10:00">10:00</option>
+          <option value="10:30">10:30</option>
+          <option value="11:00">11:00</option>
+          <option value="11:30">11:30</option>
+          <option value="12:00">12:00</option>
+          <option value="12:30">12:30</option>
+          <option value="13:00">13:00</option>
+          <option value="13:30">13:30</option>
+          <option value="14:00">14:00</option>
+          <option value="14:30">14:30</option>
+          <option value="15:00">15:00</option>
+          <option value="15:30">15:30</option>
+          <option value="16:00">16:00</option>
+          <option value="16:30">16:30</option>
+          <option value="17:00">17:00</option>
+          <option value="17:30">17:30</option>
+          <option value="18:00">18:00</option>
+          <option value="18:30">18:30</option>
+          <option value="19:00">19:00</option>
+          <option value="19:30">19:30</option>
+          <option value="20:00">20:00</option>
+          <option value="20:30">20:30</option>
+          <option value="21:00">21:00</option>
+          <option value="21:30">21:30</option>
+          <option value="22:00">22:00</option>
+          <option value="22:30">22:30</option>
+          <option value="23:00">23:00</option>
+          <option value="23:30">23:30</option>
+          <option value="24:00">24:00</option>
+          <option value="24:30">24:30</option>          
+          </select></td></tr>
+        </table>
+        <br />
+        <div>
+            <div>Camera Street Corner:</div>
+            <table id="cameracorner" style="width:100%">
+                <tr>
+                    <td style="width:20%">
+                        <select id="cameralocation-dropdown">
+                            <option disabled selected value>-- select an option --</option>
+                            <option value="north">North</option>
+                            <option value="south">South</option>
+                            <option value="east">East</option>
+                            <option value="west">West</option>
+                            <option value="northeast">Northeast</option>
+                            <option value="northwest">Northwest</option>
+                            <option value="southeast">Southeast</option>
+                            <option value="southwest">Southwest</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </td>
+                    <td style="width:80%"><input type="text" name="cameralocation-text" id="cameralocation-text" placeholder="Corner camera is located at" /></td>
+                </tr>
+            </table>
+        </div>
+        <br />
+        <label for="videosetname">Video Set Name:
+          <input type="text" name="videosetname" id="videosetname" placeholder="Video set name/description" required />
+        </label>
+        <label for="duration" style="margin-right: 15px">Combine into videos with duration:
+          <select name="segmentduration" id="segmentduration" style="margin-left: 10px;">
+            <option value="1" selected="selected">1 hour</option>
+            <option value="2">2 hours</option>
+            <option value="3">3 hours</option>
+            <option value="4">4 hours</option>
+            <option value="5">5 hours</option>
+            <option value="6">6 hours</option>
+          </select>
+        </label>
+        <label style="margin-top: 10px">Resulting video set to upload:</label>
+        <table  style="margin-left: 10px; font-size: .75em" id="videonamestable"></table>
+        <div id="videonamelist"></div>
+        <br />
+        <label style="margin-top: 10px">Total size of payload: <span id="totaluploadfilesize"></span></label>
+        <label style="margin-left: 10px; font-size: .75em">Video upload time varies based on connection speed (~2-3 min per 170Mb video).</label>
+      </fieldset>
+      <br />
+      <div id="dlgbuttons">
+        <button id="cancelvideoupload" onclick="cancelUploadVideoDialog()">Cancel</button>
+        <button id="uploadvideoset">Upload</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- placeholder for acknowledgeclose dialog -->
+<div class="dialog-overlay" id="dialog-videoacknowledgedelete">
+  <div class="dialog-wrapper">
+    <div class="dialog-content">
+      <h2>Delete Site</h2>
+      <br />
+      <fieldset>
+        <label>Are you sure you want to delete this site?</label>
+      </fieldset>
+      <br />
+      <div id="dlgbuttons">
+        <button onclick="cancelVideoDelete()">Cancel</button>
+        <button onclick="deleteVideoJobsite()">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- placeholder for addJobsite dialog -->
+<div class="dialog-overlay" id="dialog-createvideojobsite">
+  <div class="dialog-wrapper">
+    <div class="dialog-content">
+      <h2 id="jobsite-createheader"></h2>
+      <br />
+      <div id="videojobsite-errorfield">Enter new site details</div>
+      <fieldset>
+        <table id="jobsiteedittable" style="width: 100%">
+          <col id="col-label"/>
+          <col id="col-input"/>
+          <tbody>
+            <tr>
+              <td><label for="videojobsite-sitecode" >Sitecode</label></td>
+              <td><input type="text" name="videojobsite-sitecode" id="videojobsite-sitecode" placeholder="Jobsite identifier" required /></td>
+            </tr>
+            <tr>
+              <td><label for="videojobsite-location" >Location</label></td>
+              <td><input type="text" name="videojobsite-location" id="videojobsite-location" placeholder="Jobsite location description" required /></td>
+            </tr>
+            <tr>
+              <td><label for="videojobsite-location" >Intersection</label></td><td></td>
+            </tr>
+          </tbody>
+        </table>
+        <table id="jobsitelegrows" style="width: 100%">
+          <col id="col-label"/>
+          <col id="col-input"/>
+          <tbody>
+            <tr>
+              <td><label for="videojobsite-nstreet">North Leg</label></td>
+              <td><input type="text" name="videojobsite-nstreet" id="videojobsite-nstreet" placeholder="street name" /></td>
+            </tr>
+            <tr>
+              <td><label for="videojobsite-sstreet">South Leg</label></td>
+              <td><input type="text" name="videojobsite-sstreet" id="videojobsite-sstreet" placeholder="street name" /></td>
+            </tr>
+            <tr>
+              <td><label for="videojobsite-estreet">East Leg</label></td>
+              <td><input type="text" name="videojobsite-estreet" id="videojobsite-estreet" placeholder="street name" /></td>
+            </tr>
+            <tr>
+              <td><label for="videojobsite-wstreet">West Leg</label></td>
+              <td><input type="text" name="videojobsite-wstreet" id="videojobsite-wstreet" placeholder="street name" /></td>
+            </tr>
+            <tr>
+              <td><label for="videojobsite-nestreet">Northeast Leg</label></td>
+              <td><input type="text" name="videojobsite-nestreet" id="videojobsite-nestreet" placeholder="street name" /></td>
+            </tr>
+            <tr>
+              <td><label for="videojobsite-swstreet">Southwest Leg</label></td>
+              <td><input type="text" name="videojobsite-swstreet" id="videojobsite-swstreet" placeholder="street name" /></td>
+            </tr>
+            <tr>
+              <td><label for="videojobsite-nwstreet">Northwest Leg</label></td>
+              <td><input type="text" name="videojobsite-nwstreet" id="videojobsite-nwstreet" placeholder="street name" /></td>
+            </tr>
+            <tr>
+              <td><label for="videojobsite-sestreet">Southeast Leg</label></td>
+              <td><input type="text" name="videojobsite-sestreet" id="videojobsite-sestreet" placeholder="street name" /></td>
+            </tr>
+          </tbody>
+        </table>
+        <br />
+        <label for="countpriority" style="margin-right: 15px">Count Priority: 
+          <select name="countpriority" id="countpriority" style="margin-left: 10px">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3" selected="selected">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+          </select>
+        </label>
+      </fieldset>
+      <br />
+      <div id="dlgbuttons">
+        <button onclick="cancelNewVideoJobsiteDialog()">Cancel</button>
+        <button id="videojobsite-submitbtn">Submit</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- JobSiteManager screen -->
+<div>
+  <div id="idaxtitle"><img style="float: right" src="images/IDAX_2-blue-35w.png" width="35"/>Current Job: <span id="videojobsitesidentifiername"> </span></div>
+  <button class="hdrbutton" onclick="exitVideoJobsitesManager()">Done</button>
+  <button class="hdrbutton" style="float: left" onclick="createNewVideoJobsite()">Add Site</button>
+  <button class="hdrbutton" id="editvideojobsitebtn" style="float: left" onclick="editVideoJobsite()">Edit Site</button>
+  <button class="hdrbutton" id="deletevideojobsitebtn" style="float: left" onclick="openVideoAcknowledgeDelete()">Delete Site</button>
+  <input type="file" id="videoFileElem" multiple accept="video/mp4" style="display:none" onchange="handleVideoFiles(this.files)">
+  <button class="hdrbutton" id="uploadvideobtn" style="float: left">Upload Videos</button>
+  <button class="hdrbutton" style="float: left" id="getusercountsbtn" onclick="getUserCounts()">Get User Counts</button>
+  <br />
+  <div id="videojobsites">Video Job Sites</div>
+  <table id="videojobsitestable">
+    <tr>
+      <td>
+        <table id="videojobsitestablehead">
+          <col id="col-sitecode"/>
+          <col id="col-location"/>
+          <col id="col-updated"/>
+          <col id="col-priority"/>
+          <!--<col id="col-numdevices"/>-->
+          <col id="col-numvideos"/>
+          <col id="col-numlayouts"/>
+           <col id="col-status"/>
+          <col id="col-endspace"/>
+          <tr>
+            <td id="sort-sitecode">Sitecode</td>
+            <td id="sort-location">Location</td>
+            <td id="sort-updated">Updated</td>
+            <td id="sort-priority">Priority</td>
+            <!--<td id="sort-numdevices"># Devices</td>-->
+            <td id="sort-numvideos"># Videos</td>
+            <td id="sort-numlayouts"># Layouts</td>
+            <td id="sort-status">Status</td>
+            <td></td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <div id="videojobsitestablediv">
+          <table id="videojobsitestablerows">
+          <col id="col-sitecode"/>
+          <col id="col-location"/>
+          <col id="col-updated"/>
+          <col id="col-priority"/>
+          <!--<col id="col-numdevices"/>-->
+          <col id="col-numvideos"/>
+          <col id="col-numlayouts"/>
+           <col id="col-status"/>
+          </table>
+        </div>
+      </td>
+    </tr>
+  </table>
+    <div id="jobsite-info">
+        <br />
+        <div id="viewvideos" style="margin-left: 20px;">
+            <span>Uploaded Videos</span>
+            <button class="hdrbutton" style="margin-top: -5px;" id="videojobsite-refreshvideosbtn">Refresh</button>
+        </div>
+        <!--<span id="viewvideos" onclick="viewVideos()">Videos</span><span> | </span><span id="viewdevices" onclick="viewDevices()">Devices</span>-->
+        <div id="jobsite-map">
+            <table id="jobsite-info-table">
+                <tr>
+                    <td class="jobsiteinfo-cell" id="jobsiteinfo-left" style="width: 50%"></td>
+                    <td class="jobsiteinfo-cell" id="jobsiteinfo-right" style="width: 50%" valign="top">
+
+                        <button class="hdrbutton" id="devicestatusrefreshbtn" style="float: left" onclick="RefreshData()">Refresh</button>
+                        <button class="hdrbutton" id="advancedbtn" style="float: left" onclick="OnAdvancedClicked()">Advanced</button>
+                        <br/>
+                        <table id="devicestatustable">
+                            <tr>
+                                <td>
+                                    <table style="align:center">
+                                        <tr>
+                                            <td style="width: 180px; text-align:right;">Status: </td>
+                                            <td>
+                                                <img id="devstatus-online-img" src="images/online.png" height="20" width="20" style="-webkit-filter: grayscale(100%); filter: grayscale(100%)">
+                                                <img id="devstatus-capturing-img" src="images/recording.png" height="20" width="20" style="-webkit-filter: grayscale(100%); filter: grayscale(100%)">
+                                                <img id="devstatus-uploading-img" src="images/uploading.png" height="20" width="20" style="-webkit-filter: grayscale(100%); filter: grayscale(100%)">
+                                                <img id="devstatus-streaming-img" src="images/streaming.jpg" height="20" width="20" style="-webkit-filter: grayscale(100%); filter: grayscale(100%)">
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td style="width: 180px; text-align: right;">Time: </td>
+                                            <td id="deviceTimeText" style="width: 240px; text-align:left"></td>
+                                        </tr>
+                                        <tr>
+                                            <td style="width: 180px; text-align:right;">Battery: </td>
+                                            <td id="deviceBatteryLevelText" style="width: 240px; text-align:left;"></td>
+                                        </tr>
+                                        <tr>
+                                            <td style="width: 180px; text-align:right;">Storage: </td>
+                                            <td id="deviceStorageInfoText" style="width: 240px; text-align:left;"></td>
+                                        </tr>
+                                    </table>
+                                </td>
+                                <td>
+                                    <table style="align:center">
+                                        <tr>
+                                            <td style="width: 180px; text-align:right;">WiFi: </td>
+                                            <td id="deviceWifiInfotext" style="width: 240px; text-align:left;"></td>
+                                        </tr>
+                                        <tr>
+                                            <td style="width: 180px; text-align:right;">Cellular: </td>
+                                            <td id="deviceCellularInfotext" style="width: 240px; text-align:left;"></td>
+                                        </tr>
+                                        <tr>
+                                            <td style="width: 180px; text-align: right;">Video Format: </td>
+                                            <td id="videoFormatText" style="width: 240px; text-align:left"></td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                        </table>
+                        <br />
+
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <div id="jobsite-videos">
+            <table id="videotable">
+                <tr>
+                <td>
+                    <table id="videotablehead">
+                    <col id="col-vlname"/>
+                    <col id="col-vlsize"/>
+                    <col id="col-vladded"/>
+                    <col id="col-vlstatus"/>
+                    <col id="col-vluploadtime"/>
+                    <col id="col-vlnumlayouts"/>
+                    <col id="col-endspace"/>
+                    <tr>
+                        <td id="sort-vlname">Name</td>
+                        <td id="sort-vlsize">Size</td>
+                        <td id="sort-vladded">Uploaded</td>
+                        <td id="sort-vlstatus">Status</td>
+                        <td id="sort-vluploadtime">Ingestion Time</td>
+                        <td id="sort-vlnumlayouts"># Layouts</td>
+                        <td></td>
+                    </tr>
+                    </table>
+                </td>
+                </tr>
+                <tr>
+                <td>
+                    <div id="videotablediv">
+                    <table id="videotablerows">
+                    <col id="col-vlname"/>
+                    <col id="col-vlsize"/>
+                    <col id="col-vladded"/>
+                    <col id="col-vlstatus"/>
+                    <col id="col-vluploadtime"/>
+                    <col id="col-vlnumlayouts"/>
+                    </table>
+                    </div>
+                </td>
+                </tr>
+            </table>
+        </div>
+    </div>
+</div>

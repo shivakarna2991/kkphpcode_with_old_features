@@ -1,0 +1,92 @@
+/*
+*    jobmanager layout
+*/
+
+div.jobs-content {
+  position: absolute;
+  height: 800px;
+  width: 950px;
+  top: 75px;
+  left: 50%;
+  margin-left: -475px;
+  text-align: left;
+  background-color: rgb(255,255,255);
+  border-radius: 2px;
+}
+
+/*
+*    Jobs header
+*/
+#jobtitle {
+  margin-top: 20px;
+  margin-left: 20px;
+  width: 827px;
+  border-bottom: 1px solid #666;
+}
+#jobidentifiername {
+  color: #0453ff;
+}
+
+#activejobs {
+  margin-top: 40px;
+  margin-left: 20px; 
+}
+/* 
+*    Jobs table
+*/
+#jobstable {
+  width: 910px;
+  height: 575px;
+  border-collapse: collapse;
+  border-style: solid; 
+  border-width: 1px;
+  border-color: #666;
+  table-layout: fixed;
+  margin-left: 20px;
+  text-align: center;
+  font-family:sans;
+}
+#jobstable td {
+  height: 25px;
+}
+#jobstable td:nth-of-type(2) {
+  text-align: left;
+}
+#col-number, #col-nickname, #col-office, #col-type, #col-created, #col-updated {
+  width: 100px;
+}
+#col-name {
+  width: 285px;
+}
+#col-endspace {
+  width: 25px;
+}
+#jobstablehead {
+  background:#666;
+  color:#fff;
+  width: 908px;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+#jobstablediv {
+  width: 908px;
+  height: 625px;
+  overflow: auto;
+}
+#jobstablerows {
+  vertical-align: middle;
+  width: 883px;
+  color: #444444;
+  font-size: .85em;
+}
+#jobstablerows tr:nth-child(2n+1) {
+  background: #f4f4f4;
+}
+#jobstablerows tbody tr:hover {
+  background: #cccccc;
+  cursor: pointer;
+}

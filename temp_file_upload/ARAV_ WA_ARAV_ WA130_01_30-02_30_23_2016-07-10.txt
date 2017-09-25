@@ -1,0 +1,2 @@
+VideoStartTime: 00:00:00 07/10/2016
+Direction,VideoPos,VideoSpeed,CountType,ObjectType,CountedTime

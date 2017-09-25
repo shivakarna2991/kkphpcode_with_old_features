@@ -1,0 +1,22 @@
+/*
+*    LOG-IN BOX
+*/
+
+#errorfield {
+  text-align: left;
+  padding-bottom: 10px;
+}
+div.login-content {
+  position: absolute;
+  height: 365px;
+  width: 450px;
+  top: 75px;
+  left: 50%;
+  margin-left: -225px;
+  text-align: left;
+  background-color: rgb(255,255,255);
+  border-radius: 2px;
+  padding-top: 20px;
+  padding-left: 20px;
+  padding-right: 20px;
+}

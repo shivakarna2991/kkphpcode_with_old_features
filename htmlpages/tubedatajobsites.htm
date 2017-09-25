@@ -1,0 +1,1124 @@
+<link href="css/tubejobsites.css" rel="stylesheet" type="text/css" />
+<link href="css/dialogform.css" rel="stylesheet" type="text/css" />
+<link href="css/genreportsdialog.css" rel="stylesheet" type="text/css" />
+<link href="css/jquery-datepicker-ui.css" rel="stylesheet" type="text/css" />
+
+<script src="../js/createreportfunctions.js" type="text/javascript"></script>
+<script src="../js/TubeReportFormatManagerProxy.js" type="text/javascript"></script>
+
+<script>
+    /* globals */
+    var tubeReportFormats;
+
+    // global files list used for selecting files for upload
+    var jobFiles = [];
+    var selectedFiles;
+
+    function CreateReportParamFields(
+        formname,
+        reportFormatsDropdownElem,
+        reportParamsElem,
+        reportFormat,
+        formatInfo,
+        reportParameters
+        )
+    {
+        //
+        // Parameter key/values come formatted in a single string formatted as key1=value1;key2=value2; etc
+        // Here we'll create an array of parameters, each element itself being an array containing the key and value.
+        //
+        var paramKeyValues = [];
+        var i;
+        var k;
+
+        if (typeof reportParameters !== 'undefined')
+        {
+            var params = reportParameters.split(";");
+
+            for (i=0; i<params.length; i++)
+            {
+                paramKeyValues.push(params[i].split("=", 2));
+            }
+        }
+
+        var fields = "";
+
+        if (formatInfo.fields.length > 0)
+        {
+            var textfields = "";
+            var boolfields = "";
+            var dropdownfields = "";
+
+            for (var j=0; j<formatInfo.fields.length; j++)
+            {
+                var field = formatInfo.fields[j];
+                var fieldvalue = null;
+
+                // Find the param value pair for this field.
+                for (k=0; k<paramKeyValues.length; k++)
+                {
+                    if (field.name === paramKeyValues[k][0])
+                    {
+                        fieldvalue = paramKeyValues[k][1];
+                        break;
+                    }
+                }
+
+                switch (field.type)
+                {
+                    case "string":
+                    case "number":
+                        if ((typeof field.allowedvalues !== 'undefined')
+                                && (field.allowedvalues !== null)
+                                && (field.allowedvalues.length > 0))
+                        {
+                            // Create a dropdown with the allowedvalues
+                            dropdownSelect = "<div class=\"form-group\"><label for \"" + field.name + "\">" + field.friendlyname + "</label><select class=\"" + formname + "-reportparameter-select\" data-friendlyname=\"" + field.friendlyname + "\" name=\"" + field.name + "\" id=\"" + field.name + "\"></div>";
+                            dropdownOptions = "";
+
+                            for (k=0; k<field.allowedvalues.length; k++) {
+                                var selected = "";
+                                if (field.allowedvalues[k] === fieldvalue)
+                                {
+                                    selected = "selected";
+                                }
+                                else if ((field.allowedvalues[k] === field.defaultvalue)
+                                        && (fieldvalue === null))
+                                {
+                                    selected = "selected";
+                                }
+
+                                dropdownOptions += "<option value=\"" + k + "\" " + selected + ">" + field.allowedvalues[k] + "</option>";
+                            }
+
+                            dropdownfields += dropdownSelect + dropdownOptions + "</select></br>";
+                        }
+                        else
+                        {
+                            // Create a text box for the field
+                            var defaultvalue = "";
+
+                            if (fieldvalue !== null)
+                            {
+                                defaultvalue = "value=\"" + fieldvalue + "\" ";
+                            }
+                            else if ((typeof field.defaultvalue !== 'undefined')
+                                    && (field.defaultvalue !== null)
+                                    && (field.defaultvalue !== "")
+                                    && (fieldvalue === null))
+                            {
+                                defaultvalue = "value=\"" + field.defaultvalue + "\" ";
+                            }
+
+                            var required = "";
+                            if (field.required)
+                            {
+                                required = "required";
+                            }
+
+                            var inputType = "text";
+                            if (field.type == "number")
+                            {
+                                inputType = "number";
+                            }
+
+                            textfields += "<div class=\"form-group\"><label for=\"" + field.name + "\">" + field.friendlyname + "<input type=\"" + inputType + "\" data-friendlyname=\"" + field.friendlyname + "\" name=\"" + field.name + "\" class=\"" + formname + "-reportparameter-text\" id=\"" + field.name + "\" placeholder=\"" + field.description + "\" " + defaultvalue + required + "/></label></div>";
+                        }
+                        break;
+
+                    case "bool":
+                        // Create a checkbox for the field.
+                        var checked = "";
+                        if ((fieldvalue !== null) && fieldvalue)
+                        {
+                            checked = "checked";
+                        }
+                        else if ((typeof field.defaultvalue !== 'undefined')
+                                && (field.defaultvalue !== null)
+                                && (field.defaultvalue !== "")
+                                && (field.defaultvalue)
+                                && (fieldvalue === null))
+                        {
+                            checked = "checked";
+                        }
+                        boolfields += "<input data-friendlyname=\"" + field.friendlyname + "\"name=\"" + field.name + "\" type=\"checkbox\" id=\"" + field.name + "\" class=\"" + formname + "-reportparameter-checkbox\" " + checked + "/><label for=\"" + field.name + "\"><span><span></span></span>" + field.friendlyname + "</label>";
+                        break;
+
+                    default:
+                        break;
+                }
+            }
+
+            // put string and number fields (text boxes) at the beginning of the fieldset, bools (checkboxes) at the end.
+            fields += textfields + dropdownfields + boolfields + "";
+        }
+
+        reportParamsElem.innerHTML = fields;
+    }
+
+    function PopulateReportFormats(
+        formName,
+        reportFormatsDropdownElem,
+        reportParamsElem,
+        defaultReportFormat,
+        defaultReportParameters
+        )
+    {
+        var reportFormatOptions = "";
+        var selected;
+
+        if (typeof tubeReportFormats.formName === 'undefined')
+        {
+            tubeReportFormats.formName = { selectedIndex: null, userEnteredReportParameters: null };
+        }
+
+        for (var i=0; i<tubeReportFormats.length; i++)
+        {
+            if ((typeof defaultReportFormat !== 'undefined')
+                    && (tubeReportFormats[i].name.toLowerCase() === defaultReportFormat.toLowerCase()))
+            {
+                tubeReportFormats.formName.selectedIndex = i;
+                tubeReportFormats[i].userEnteredReportParameters = defaultReportParameters;
+
+                selected = "selected";
+
+                // Create the input fields for each parameter and populate with the report parameter values.
+                CreateReportParamFields(
+                        formName,
+                        reportFormatsDropdownElem,
+                        reportParamsElem,
+                        defaultReportFormat,
+                        tubeReportFormats[i],
+                        defaultReportParameters
+                        );
+            }
+            else
+            {
+                selected = "";
+            }
+
+            reportFormatOptions += "<option value=\"" + i + "\" " + selected + ">" + tubeReportFormats[i].name + "</option>";
+        }
+
+        reportFormatsDropdownElem.innerHTML = reportFormatOptions;
+
+        reportFormatsDropdownElem.onchange = (
+                function()
+                {
+                    //
+                    // Check if the selection actually changed (i.e. if the current selection is different than
+                    // the previous selection)
+                    //
+                    var reportFormatIndex = reportFormatsDropdownElem.selectedIndex;
+                    var reportFormat = reportFormatsDropdownElem.options[reportFormatIndex].innerHTML;
+
+                    if (reportFormatIndex !== tubeReportFormats.formName.selectedIndex)
+                    {
+                        //
+                        // The selection has changed.  First thing we do is grab the current set of parameters
+                        // the user entered so that we can restore them if the user switches back to the previous
+                        // format.
+                        //
+                        if (tubeReportFormats.formName.selectedIndex !== null)
+                        {
+                            tubeReportFormats[tubeReportFormats.formName.selectedIndex].userEnteredReportParameters = GetReportParameters(formName);
+                        }
+
+                        tubeReportFormats.formName.selectedIndex = reportFormatIndex;
+
+                        tubeReportFormats.formName.selectedFormat = reportFormat;
+
+                        CreateReportParamFields(
+                                formName,
+                                reportFormatsDropdownElem,
+                                reportParamsElem,
+                                reportFormat,
+                                tubeReportFormats[reportFormatIndex],
+                                tubeReportFormats[tubeReportFormats.formName.selectedIndex].userEnteredReportParameters
+                                );
+                    }
+                }
+                );
+    }
+
+    function GetReportParameters(
+        formName
+        )
+    {
+        var reportParameterTextElements = document.getElementsByClassName(formName + "-reportparameter-text");
+        var reportParameterSelectElements = document.getElementsByClassName(formName + "-reportparameter-select");
+        var reportParameterCheckboxElements = document.getElementsByClassName(formName + "-reportparameter-checkbox");
+
+        var i;
+        var parameterIndex = 0;
+        var reportParameters = "";
+
+        for (i=0; i<reportParameterTextElements.length; i++)
+        {
+            reportParameters += reportParameterTextElements[i].name + "=" + reportParameterTextElements[i].value + ";";
+        }
+
+        for (i=0; i<reportParameterSelectElements.length; i++)
+        {
+            reportParameters += reportParameterSelectElements[i].name + "=" + reportParameterSelectElements[i].options[reportParameterSelectElements[i].selectedIndex].innerHTML + ";";
+        }
+
+        for (i=0; i<reportParameterCheckboxElements.length; i++)
+        {
+            var checkedStringValue = "0";
+
+            if (reportParameterCheckboxElements[i].checked)
+            {
+                checkedStringValue = "1";
+            }
+
+            reportParameters += reportParameterCheckboxElements[i].name + "=" + checkedStringValue + ";";
+        }
+
+        // Use slice to remove the ending ';' character.
+        return reportParameters.slice(0, -1);
+    }
+
+    /* initialize this form
+    */
+    function initProcessDataForm() {
+        initCreateJobsiteDialog();
+        initJobsiteTableSort();
+        initFileClicker();
+        initGenerateReportsDialog();
+        initProcessingDataDialog();
+        initJobsiteRowSelect();
+        initAcknowledgeDeleteDialog();
+    }
+    /* initialize placeholder jquery dialog 
+    */
+    function initCreateJobsiteDialog()
+    {
+        $("#dialog-createjobsite").dialog({
+            resizable: false,
+            dialogClass: "no-close",
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+
+        $("#jobsite-sitecode").on('input', resetJobsiteErrorField);
+        $("#jobsite-location").on('input', resetJobsiteErrorField);
+
+        TubeReportManagerGetReportFormats(
+                function(context, textStatus, response, resultstring, reportFormats) {
+                    tubeReportFormats = reportFormats;
+
+                    PopulateReportFormats(
+                            "jobsite",
+                            document.getElementById("jobsite-reportformats-dropdown"),
+                            document.getElementById("jobsite-reportformat-fields")
+                            );
+                },
+                null);
+    }
+    /* initialize placeholder acknowledge close job dialog 
+    */
+    function initAcknowledgeDeleteDialog() {
+        $("#dialog-acknowledgedelete").dialog({
+            resizable: false,
+            dialogClass: "no-close",
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+    }
+    function openAcknowledgeDelete() {
+        $("#dialog-acknowledgedelete").dialog("open");
+    }
+    function cancelDelete() {
+        // close dialog
+        $("#dialog-acknowledgedelete").dialog("close");
+    }
+    /* delete the current jobsite
+    */
+    function deleteJobsite() {
+        var authToken = readCookie("authToken");
+        var jobsiteid = readCookie("currentjobsiteid");
+        var paramsString = METHODCALL_HEADER_PARAM_AUTHTOKEN + "=" + authToken + "&jobsiteid=" + jobsiteid;
+        $.ajax({
+            type: "GET",
+            url: "MethodCall.php/JobSite::Delete",
+            data: paramsString,
+            dataType: "html",
+            cache: false,
+            success: function(result) {
+                jsonResponse = JSON.parse(result);
+                var response = jsonResponse['results']['response'];
+                if (response == "success") {
+                    // close acknowledge dialog
+                    $("#dialog-acknowledgedelete").dialog("close");
+                    
+                    // remove selected row from table, clear Current Jobsite 
+                    clearCurrentJobsite();
+                } 
+                else {
+                    if (jsonResponse['results']['returnval']['resultstring'] == "login required") {
+                        // close this form, inform user and logout
+                        loginRequired();
+
+                        // close dialog
+                        $("#dialog-acknowledgedelete").dialog("close");
+                    } 
+                    else {
+                        showErrorDialog("Unknown server error, please try again");
+                    }
+                }
+            },
+            error: function (request, status, error) {
+                showErrorDialog("Server error: " + status);
+            }
+        });
+    }
+    /* clear the current job
+    */
+    function clearCurrentJobsite()
+    {
+        var jobsiteId = readCookie("currentjobsiteid");
+
+        // erase currentjob cookies
+        eraseCookie("currentjobsiteid");
+        
+        // remove selected row from table
+        var table = document.getElementById("jobsitestablerows");
+        for (var i = 0; i<table.rows.length; i++) {
+            var row = table.rows[i];
+            var cell = row.cells[0];
+            var cellid = cell.getAttribute("id");
+            // if a match delete row
+            if (cellid == jobsiteId) {
+                table.deleteRow(row.rowIndex);
+            }
+        }
+    }
+    /* initialize rowselect function
+    */
+    function initJobsiteRowSelect()
+    {
+        $('#jobsitestablerows tbody tr').click(function() {
+            var tr = $(this).closest('tr');
+            var jobsiteid = $(tr).find('td').eq(0).attr("id");
+
+            // set current job and highlight selection
+            setCurrentJobsite(jobsiteid);
+        });
+    }
+    /* function sets the page's Current Jobsite to reflect the selected row in the table
+    */
+    function setCurrentJobsite(jobsiteId)
+    {
+        createCookie("currentjobsiteid", jobsiteId, 0);
+
+        // enable buttons that act on a selected job
+        document.getElementById('deletejobsitebtn').disabled = false;
+
+        // highlight selected row and unhighlight previous selected row
+        var table = document.getElementById("jobsitestablerows");
+        for (var i = 0; i<table.rows.length; i++)
+        {
+            var row = table.rows[i];
+            var cell = row.cells[0];
+            var cellid = cell.getAttribute("id");
+            var issel = cell.getAttribute("data-selected");
+
+            // if not a match
+            if (cellid != jobsiteId)
+            {
+                cell.setAttribute("id", cellid);
+                cell.setAttribute("data-selected", false);
+
+                row.style.color = "#000000";
+                row.style.backgroundColor = "";
+            }
+            // else if a match
+            else
+            {
+                cell.setAttribute("id", cellid);
+                cell.setAttribute("data-selected", true);
+
+                row.style.color = "#ffffff";
+                row.style.backgroundColor = "#0065ca";
+            }
+        }
+    }
+    /* initialize file picker
+    */
+    function initFileClicker() {
+        var fileSelect = document.getElementById("associatefilesbtn"),
+        fileElem = document.getElementById("fileElem");
+
+        fileSelect.addEventListener("click", function (e) {
+            if (fileElem) {
+                fileElem.click();
+            }
+            e.preventDefault(); // prevent navigation propagation
+        }, false);
+    }
+    /* file picker handler
+    */
+    function handleFiles(files) {
+        // save off files list for use in misMatchDirectionDialog
+        selectedFiles = files;
+
+        // reset jobFiles global to empty, add matched files individually
+        while(jobFiles.length > 0) {
+            jobFiles.pop();
+        }
+
+        var jobsitestable = document.getElementById('jobsitestablerows');
+        var cell;
+        var cellid;
+        var j;
+        var row;
+
+        // reset table, all rows unselected
+        for (j = 0; j < jobsitestable.rows.length; j++) {
+            row = jobsitestable.rows[j];
+            cell = row.cells[0];
+            cellid = cell.getAttribute("id");
+            var issel = cell.getAttribute("data-selected");
+            if (issel == "true") {
+                // update row with filename and highlight row
+                row.cells[5].innerHTML = "-";
+
+                cell.setAttribute("id", cellid);
+                cell.setAttribute("data-selected", false);
+
+                row.style.color = "#000000";
+                row.style.backgroundColor = "";
+            }
+        }
+
+        var numFiles = files.length;
+        for (var i = 0; i < numFiles; i++) {
+            // determine sitecode
+            var filename = files[i].name;
+            var basename = filename.substr(0,filename.lastIndexOf('.'));
+
+            // if a valid sitecode
+            if (typeof basename !== 'undefined' && basename !== null && basename !== "") {
+                // match filenames with jobsite rows by sitecode
+                for (j = 0; j < jobsitestable.rows.length; j++) {
+                    row = jobsitestable.rows[j];
+                    cell = row.cells[0];
+                    cellid = cell.getAttribute("id");
+
+                    // match the row by sitecode from the filename
+                    if (cell.innerText == basename) {
+                        // update row with filename and highlight row
+                        row.cells[5].innerHTML = filename;
+
+                        // set id attribute to include selected state
+                        cell.setAttribute("id", cellid);
+                        cell.setAttribute("data-selected", true);
+
+                        row.style.color = "#ffffff";
+                        row.style.backgroundColor = "#0065ca";
+
+                        // add file to jobFiles array
+                        jobFiles.push(files[i]);
+
+                        // with first match found, enable upload files button
+                        document.getElementById('uploadfilesbtn').disabled = false;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    /* open createNewJob dialog
+    */
+    function createNewJobsite() {
+        $("#jobsite-sitecode").val(readCookie("currentjobnickname") + ": " + readCookie("currentjoboffice"));
+        $("#jobsite-location").val("");
+        document.getElementById('northsouth').checked = true;
+        document.getElementById('twoway').checked = true;
+        resetJobsiteErrorField();
+        $("#dialog-createjobsite").dialog("open");
+    }
+    /* cancel createNewJob dialog
+    */
+    function cancelNewJobsiteDialog() {
+        // close dialog
+        $("#dialog-createjobsite").dialog("close");
+    }
+    /* validate inputs, and if valid post createNewJob inputs
+    */
+    function validJobsiteInputs()
+    {
+        var errorfield = document.getElementById('jobsite-errorfield');
+        var reportParameterTextElements = document.getElementsByClassName("jobsite-reportparameter-text");
+
+        // check for valid input fields
+        var jobsitecode = document.getElementById('jobsite-sitecode').value;
+        var jobsitelocation = document.getElementById('jobsite-location').value;
+
+        if (typeof jobsitecode === 'undefined' || jobsitecode === null || jobsitecode === "") {
+            errorfield.style.color = "#b5535f";
+            errorfield.innerHTML = "Error: sitecode is required.";
+            return false;
+        }
+        else
+        {
+            for (i=0; i<reportParameterTextElements.length; i++)
+            {
+                if ((reportParameterTextElements[i].value === "") && reportParameterTextElements[i].required)
+                {
+                    errorfield.style.color = "#b5535f";
+
+                    if (reportParameterTextElements[i].type === "number")
+                    {
+                        errorfield.innerHTML = "Error: " + reportParameterTextElements[i].getAttribute("data-friendlyname") + " is required and must be a number.";
+                    }
+                    else
+                    {
+                        errorfield.innerHTML = "Error: " + reportParameterTextElements[i].getAttribute("data-friendlyname") + " is required.";
+                    }
+                    return false;
+                }
+                else if ((reportParameterTextElements[i].value !== "")
+                        && (reportParameterTextElements[i].type === "number")
+                        && isNaN(reportParameterTextElements[i].value))
+                {
+                    errorfield.style.color = "#b5535f";
+                    errorfield.innerHTML = "Error: " + reportParameterTextElements[i].getAttribute("data-friendlyname") + " must be a number.";
+                    return false;
+                }
+            }
+        }
+
+        // valid inputs, proceed with call to server
+        var authToken = readCookie("authToken");
+
+        var direction = "";
+        if (document.getElementById('eastwest').checked) {
+            direction = "Eastbound/Westbound";
+        } else if (document.getElementById('northsouth').checked) {
+            direction = "Northbound/Southbound";
+        }
+
+        var oneWay = "";
+        if (document.getElementById('twoway').checked) {
+            oneWay = "0";
+        } else {
+            oneWay = "1";
+        }
+
+        var reportFormatDropdown = document.getElementById("jobsite-reportformats-dropdown");
+        var reportFormat = reportFormatDropdown.options[reportFormatDropdown.selectedIndex].innerHTML;
+
+        reportParameters = GetReportParameters("jobsite");
+
+        var paramsString = METHODCALL_HEADER_PARAM_AUTHTOKEN + "=" + authToken;
+        paramsString += "&jobid=" + readCookie("currentjobid");
+        paramsString += "&sitecode=" + jobsitecode;
+        paramsString += "&type=TubeData";
+        paramsString += "&description=" + encodeURIComponent(jobsitelocation);
+        paramsString += "&direction=" + direction;
+        paramsString += "&oneway=" + oneWay;
+        paramsString += "&reportformat=" + reportFormat;
+        paramsString += "&reportparameters=" + encodeURIComponent(reportParameters);
+
+        $.ajax({
+            type: "GET",
+            url: "MethodCall.php/Job::CreateJobSite",
+            data: paramsString,
+            dataType: "html",
+            cache: false,
+            success: function(result) {
+                jsonResponse = JSON.parse(result);
+                var response = jsonResponse['results']['response'];
+                if (response == "success") {
+                    // get projectid and save as cookie
+                    var jobsiteid = jsonResponse['results']['returnval']['jobsiteid'];
+
+                    // add new jobsite row to table
+                    var currentDate = Date();
+                    currentDate = $.datepicker.formatDate("yy-mm-dd", new Date(currentDate));
+
+                    // populate each column in jobs table
+                    var jobsitestable = document.getElementById('jobsitestablerows');
+                    var row = jobsitestable.insertRow(0);
+                    var cell = row.insertCell(0);
+                    cell.innerHTML = jobsitecode;
+                    cell.setAttribute("id", jobsiteid);
+                    cell.setAttribute("data-selected", false);
+                    cell = row.insertCell(1);
+                    cell.innerHTML = jobsitelocation;
+                    cell = row.insertCell(2);
+                    cell.innerHTML = currentDate;
+                    cell = row.insertCell(3);
+                    cell.innerHTML = direction;
+                    cell = row.insertCell(4);
+                    cell.innerHTML = "<input name='reverse' type='checkbox' id='reverse'/><label for='reverse'><span><span></span></span></label>";
+                    cell = row.insertCell(5);
+                    cell.innerHTML = "-";
+
+                    // close dialog
+                    $("#dialog-createjobsite").dialog("close"); 
+
+                    // reinit jobselect to capture the new row
+                    initJobsiteRowSelect();
+                    
+                    // if Select DataFiles is disabled, enable it
+                    if (document.getElementById("associatefilesbtn").disabled) {
+                        document.getElementById("associatefilesbtn").disabled = false;
+                    }
+                }
+                // else handle error for user 
+                else {
+                    if (jsonResponse['results']['returnval']['resultstring'] == "login required") {
+                        // close this form, inform user and logout
+                        loginRequired();
+
+                        // close dialog
+                        $("#dialog-createjobsite").dialog("close");
+                    } 
+                    else if (jsonResponse['results']['returnval']['resultstring'] == "alreadyexists") {
+                        errorfield.style.color = "#b5535f";
+                        errorfield.innerHTML = "A jobsite with this sitecode already exists";
+                    }
+                    else {
+                        errorfield.style.color = "#b5535f";
+                        errorfield.innerHTML = "Server error response: " + jsonResponse['results']['returnval']['resultstring'];
+                    }
+                }
+            },
+            error: function (request, status, error) {
+                showErrorDialog("Server error: " + status);
+            }
+        });
+
+        return true;
+    }
+    /* initialize table sort function
+    */
+    function initJobsiteTableSort() {
+        $('#sort-sitecode, #sort-location, #sort-updated, #sort-direction').click(function() {
+            var table = $("#jobsitestablerows");
+            var rows = table.find('tr').toArray().sort(comparer($(this).index()));
+            this.asc = !this.asc;
+            if (!this.asc) {
+                rows = rows.reverse();
+            }
+            for (var i = 0; i < rows.length; i++) {
+                table.append(rows[i]);
+            }
+        });
+    }
+    /* done here, close this content and open job manager
+    */
+    function exitProcessData() {
+        // hide jobsiteManager
+        $(".jobsites-content").hide();
+        
+        openJobManager();
+    }
+    /* generate reports funtions
+    initialize generate reports dialog
+    */
+    var mindate, maxdate;
+
+    function initGenerateReportsDialog() {
+        $("#dialog-generatereports").dialog({
+            resizable: false,
+            dialogClass: "no-close",
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+        $(function() { $("#startdate").datepicker(); });
+        $(function() { $("#enddate").datepicker(); });
+        $("#startdate").change(resetReportsErrorField);
+        $("#enddate").change(resetReportsErrorField);
+        $("#volume").on('click', resetReportsErrorField);
+        $("#speed").on('click', resetReportsErrorField);
+        $("#class").on('click', resetReportsErrorField);
+    }
+    /* cancel generateReports dialog
+    */
+    function cancelGenerateReportsDialog() {
+        // close dialog
+        $("#dialog-generatereports").dialog("close");
+
+        return true;
+    }
+    /* generate reports dialog functions
+    */
+    function generateReports() {
+        // Locate the selected jobsite in the jobsite table.  That's where we stored the report format and parameters.
+        var jobsiteid = readCookie("currentjobsiteid");
+        var reportFormat = "";
+        var reportParameters = "";
+        var table = document.getElementById("jobsitestablerows");
+
+        for (var i = 0; i<table.rows.length; i++) {
+            var row = table.rows[i];
+            var cell = row.cells[0];
+            var cellid = cell.getAttribute("id");
+
+            // if matched
+            if (cellid === jobsiteid) {
+                reportFormat = cell.getAttribute("data-reportformat");
+                reportParameters = cell.getAttribute("data-reportparameters");
+            }
+        }
+
+        // get valid date range from files to upload
+        var numFiles = jobFiles.length;
+
+        // use array of unique fileReaders to ensure no overlapping state info, and hopefully cross-browser compatibility
+        var reader = new Array(numFiles);
+
+        for (var i=0; i<numFiles; i++) {
+            reader[i] = new FileReader();
+            reader[i].onload = function(e) {
+                var header = e.target.result.split(":", 9);
+                var datestring = header[6]+header[7]+header[8];
+                var tokens = datestring.split(" ");
+                var dates = tokens[2]+","+tokens[3]+tokens[4]+","+tokens[8]+","+tokens[9]+tokens[10];
+                var datetokens = dates.split(",",6);
+                var newmindate = new Date(datetokens[0]+" "+datetokens[1]+", "+datetokens[2]);
+                var newmaxdate = new Date(datetokens[3]+" "+datetokens[4]+", "+datetokens[5]);
+                if (typeof mindate === 'undefined' || mindate === null || mindate > newmindate) {
+                    mindate = newmindate;
+                }
+                if (typeof maxdate === 'undefined' || maxdate === null || maxdate < newmaxdate) {
+                    maxdate = newmaxdate;
+                }
+
+                numFiles --;
+                // once all files have been scanned for date ranges, set range in datepickers and open dialog
+                if (!numFiles) {
+                    $( "#startdate" ).datepicker( "option", "minDate", mindate);
+                    $( "#startdate" ).datepicker( "option", "maxDate", maxdate);
+                    $( "#enddate" ).datepicker( "option", "minDate", mindate);
+                    $( "#enddate" ).datepicker( "option", "maxDate", maxdate);
+                    openGenerateReportsDialog(reportFormat, reportParameters);
+                }
+            };
+            reader[i].readAsText(jobFiles[i]);
+        }
+    }
+    /* open generateReports dialog
+    */
+    function openGenerateReportsDialog(
+        reportFormat,
+        reportParameters
+        )
+    {
+        $("#dialog-generatereports").dialog("open");
+
+        PopulateReportFormats(
+                "reports",
+                document.getElementById("reports-reportformats-dropdown"),
+                document.getElementById("reports-reportformat-fields"),
+                reportFormat,
+                reportParameters
+                );
+
+        resetReportsErrorField();
+    }
+    function validDateInRange(inputdate) {
+        var redate = new RegExp(/^(0[1-9]|1[012])[- /.](0[1-9]|[12][0-9]|3[01])[- /.](19|20)\d\d+$/);
+        if (redate.test(inputdate)) {
+            var newdate = new Date(inputdate);
+            if (inputdate != "Invalid Date" && !isNaN(newdate) && newdate <= maxdate && newdate >= mindate) {
+                return true;
+            }
+        }
+        return false;
+    }
+    /* validate input, upload files, ingest and generate reports for download
+    */
+    function processDataGenerateReports() {
+        var errorfield = document.getElementById('reports-errorfield');
+
+        // validate dates in range
+        var startdate = $('#startdate').val();
+        var enddate = $('#enddate').val();
+        if (!validDateInRange(startdate)) {
+            errorfield.style.color = "#b5535f";
+            errorfield.innerHTML = "Invalid Start date: "+startdate;
+            return false;
+        }
+        if (!validDateInRange(enddate)) {
+            errorfield.style.color = "#b5535f";
+            errorfield.innerHTML = "Invalid End date: "+enddate;
+            return false;
+        }
+        // make sure enddate >= startdate
+        if (enddate < startdate) {
+            errorfield.style.color = "#b5535f";
+            errorfield.innerHTML = "Invalid date range: End date before Start date";
+            return false;
+        }
+
+        // validate filetypes params
+        if (!(document.getElementById('volume').checked || document.getElementById('speed').checked || document.getElementById('class').checked)) {
+            errorfield.style.color = "#b5535f";
+            errorfield.innerHTML = "Error: Select one or more report types";
+            return false;
+        }
+
+        // if we have some files to process, start the report generation process
+        if (jobFiles.length) {
+            // close generateReports dialog
+            $("#dialog-generatereports").dialog("close");
+            generateSelectedReports();
+        }
+
+        return true;
+    }
+    /* processingdata dialog functions
+    */
+    function initProcessingDataDialog() {
+        $("#dialog-processingdata").dialog({
+            resizable: false,
+            dialogClass: "no-close",
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+        // initialize progressbar
+        $("#progressbar").progressbar({
+            value: false,
+            max: 100,
+            change: function() {
+                $(".progress-label").text($("#progressbar").progressbar("value") + "%" );
+            },
+            complete: function() {
+                $(".progress-label").text( "100%" );
+            }
+        });
+    }
+    function openProcessingDataDialog() {
+        $("#reading").hide();
+        $("#creating").hide();
+        $("#downloading").hide();
+        $("#completedduration").hide();
+        $("#doneProcessingBtn").hide();
+        $("#uploadingfiles").text("");
+        $("#readingfiles").text("");
+        $("#creatingreports").text("");
+        $("#downloadingfiles").text("");
+        $("#dialog-processingdata").dialog("open");
+    }
+    function closeProcessingDataDialog() {
+        $("#dialog-processingdata").dialog("close");
+    }
+    function resetJobsiteErrorField() {    
+        var errorfield = document.getElementById('jobsite-errorfield');
+        if (errorfield.innerText != "Enter new jobsite details") {
+            errorfield.style.color = "#000000";
+            errorfield.innerHTML = "Enter new jobsite details";
+        }
+    }
+    function resetReportsErrorField() {    
+        var errorfield = document.getElementById('reports-errorfield');
+        if (errorfield.innerText != "Select date range and report types") {
+            errorfield.style.color = "#000000";
+            errorfield.innerHTML = "Select date range and report types";
+        }
+    }
+ </script>
+
+<!-- placeholder for acknowledgeclose dialog -->
+<div class="dialog-overlay" id="dialog-acknowledgedelete">
+  <div class="dialog-wrapper">
+    <div class="dialog-content">
+      <h2>Delete Site</h2>
+      <br />
+      <fieldset>
+        <label>Are you sure you want to delete this site?</label>
+      </fieldset>
+      <br />
+      <div id="dlgbuttons">
+        <button onclick="cancelDelete()">Cancel</button>
+        <button onclick="deleteJobsite()">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+ 
+<!-- placeholder for processing files dialog -->
+<div class="dialog-overlay" id="dialog-processingdata">
+  <div class="dialog-wrapper">
+    <div class="dialog-content" style="font-size: .75em">
+      <h2>Processing Data</h2>
+      <br />
+      <table>
+        <tr>
+          <td style="text-align: left; width: 200px">Number of sites to process:</td><td id="numfiles" style="text-align: left"></td>
+        </tr>
+        <tr>
+          <td style="text-align: left">Number reports to generate:</td><td id="numreports" style="text-align: left"></td>
+        </tr>
+        <tr>
+          <td style="text-align: left">Estimated time to complete:</td><td id="estimatedtime" style="text-align: left"></td>
+        </tr>
+      </table>
+      <br />
+      <span id="processingdata"></span>
+      <fieldset>
+        <div><span>Uploading files: <span id="uploadingfiles"></span></span></div>
+        <div id="reading" style="display: none"><span>Reading files: <span id="readingfiles"></span></span></div>
+        <div id="creating" style="display: none"><span>Creating reports: <span id="creatingreports"></span></span></div>
+        <div id="downloading" style="display: none"><span>Downloading package: <span id="downloadingfiles"></span></span></div>
+        <div id="progressbar" style="margin-top: 10px"><div class="progress-label" style="text-align: center;"></div></div>
+        <div id="completedduration" style="display: none; text-align: center; margin-top: 20px"><span id="reportsduration"></span></div>
+      </fieldset>
+      <br />
+      <div id="dlgbuttons">
+        <button id="doneProcessingBtn" style="display: none" onclick="closeProcessingDataDialog()">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- placeholder for addJobsite dialog -->
+<div class="dialog-overlay" id="dialog-createjobsite">
+  <div class="dialog-wrapper">
+    <div class="dialog-content">
+      <h2>Add Site</h2>
+      <br />
+      <div id="jobsite-errorfield">Enter new site details</div>
+      <fieldset>
+        <label for="jobsite-sitecode">Sitecode
+          <input type="text" name="jobsite-sitecode" id="jobsite-sitecode" placeholder="Jobsite identifier" required />
+        </label>
+        <label for="jobsite-location">Location
+          <input type="text" name="jobsite-location" id="jobsite-location" placeholder="Jobsite location description" required />
+        </label>
+        <label>Direction (p = Primary, s = Secondary)</label>
+        <div id="radiobtns">
+          <div>
+            <input name="direction" type="radio" id="eastwest"/><label for="eastwest"><span><span></span></span>p-Eastbound, s-Westbound</label>
+          </div>
+          <div>
+            <input name="direction" type="radio" id="northsouth"/><label for="northsouth"><span><span></span></span>p-Northbound, s-Southbound</label>
+          </div>
+        </div>
+        <br />
+        <label>Traffic flow</label>
+        <div id="radiobtns">
+          <div>
+            <input name="trafficflow" type="radio" id="twoway"/><label for="twoway"><span><span></span></span>Two-way traffic</label>
+          </div>
+          <div>
+            <input name="trafficflow" type="radio" id="oneway"/><label for="oneway"><span><span></span></span>One-way traffic</label>
+          </div>
+        </div>
+        <br />
+        <span><label>Report format</label><select id=jobsite-reportformats-dropdown/></select></span>
+        </br>
+        <div id=jobsite-reportformat-fields></div>
+      </fieldset>
+      <br />
+      <div id="dlgbuttons">
+        <button onclick="cancelNewJobsiteDialog()">Cancel</button>
+        <button onclick="validJobsiteInputs()">Create</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- placeholder for GenerateReports dialog -->
+<div class="reports-overlay" id="dialog-generatereports">
+  <div class="reports-wrapper">
+    <div class="reports-content">
+      <h2>Generate reports</h2>
+      <br />
+      <div id="reports-errorfield">Select date range and report types</div>
+      <fieldset>
+        <div class="datepickerfields">
+          <label for="startdate">Start date</label>
+          <input type="text" name="startdate" id="startdate" placeholder="mm/dd/yyyy" required />
+        </div>
+        <div class="datepickerfields">
+          <label for="enddate">End date</label>
+          <input type="text" name="enddate" id="enddate" placeholder="mm/dd/yyyy" required />
+        </div>
+        <br />
+        <label>Reports types to generate:</label>
+        <div id="radiobtns">
+          <div>
+            <input name="reporttype" type="checkbox" id="volume"/><label for="volume"><span><span></span></span>Volume</label>
+          </div>
+          <div>
+            <input name="reporttype" type="checkbox" id="speed"/><label for="speed"><span><span></span></span>Speed</label>
+          </div>
+          <div>
+            <input name="reporttype" type="checkbox" id="class"/><label for="class"><span><span></span></span>Class</label>
+          </div>
+        </div>
+        <br />
+        <div>
+            <span><label>Report format <span style="font-size: 0.8em">(Optional - select to override default Jobsite configurations)</label><select id=reports-reportformats-dropdown/></select></span>
+            </br>
+            <div id=reports-reportformat-fields></div>
+        </div>
+      </fieldset>
+      <div id="dlgbuttons">
+        <button onclick="cancelGenerateReportsDialog()">Cancel</button>
+        <button onclick="processDataGenerateReports()">Generate</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- JobSiteManager screen -->
+<div>
+  <div id="idaxtitle"><img style="float: right" src="images/IDAX_2-blue-35w.png" width="35"/>Current Job: <span id="jobsitesidentifiername"> </span></div>
+  <button class="hdrbutton" onclick="exitProcessData()">Done</button>
+  <button class="hdrbutton" style="float: left" onclick="createNewJobsite()">Add Site</button>
+  <button class="hdrbutton" id="deletejobsitebtn" style="float: left" onclick="openAcknowledgeDelete()">Delete Site</button>
+  <input type="file" id="fileElem" multiple accept="text/plain" style="display:none" onchange="handleFiles(this.files)">
+  <button class="hdrbutton" id="associatefilesbtn" style="float: left">Select Data Files</button>
+  <button class="hdrbutton" style="float: left" id="uploadfilesbtn" onclick="generateReports()">Generate Reports</button>
+  <br />
+  <div id="jobsites">Roadway Job Sites</div>
+  <table id="jobsitestable">
+    <tr>
+      <td>
+        <table id="jobsitestablehead">
+          <col id="col-sitecode"/>
+          <col id="col-location"/>
+          <col id="col-updated"/>
+          <col id="col-direction"/>
+          <col id="col-reverse"/>
+          <col id="col-filename"/>
+          <col id="col-endspace"/>
+          <tr>
+            <td id="sort-sitecode">Sitecode</td>
+            <td id="sort-location">Location</td>
+            <td id="sort-updated">Updated</td>
+            <td id="sort-direction">Direction</td>
+            <td>Reverse</td>
+            <td>Data File</td>
+            <td></td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <div id="jobsitestablediv">
+          <table id="jobsitestablerows">
+          <col id="col-sitecode"/>
+          <col id="col-location"/>
+          <col id="col-updated"/>
+          <col id="col-direction"/>
+          <col id="col-reverse"/>
+          <col id="col-filename"/>
+          </table>
+        </div>
+      </td>
+    </tr>
+  </table>
+</div>

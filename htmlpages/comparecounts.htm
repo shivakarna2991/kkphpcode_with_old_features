@@ -1,0 +1,642 @@
+<link href="css/videojobsites.css" rel="stylesheet" type="text/css" />
+<link href="css/dialogform.css" rel="stylesheet" type="text/css" />
+<link href="css/jquery-datepicker-ui.css" rel="stylesheet" type="text/css" />
+
+<script src="js/uploadvideofunctions.js" type="text/javascript"></script>
+
+<script>
+    /* globals */
+    var selectedFiles;
+    var totalPayloadSize;
+    var numSegments;
+    var startDate;
+    var startTime;
+    var videoName;
+    
+    /* initialize this form
+    */
+    function initVideoJobsites() {
+        initCreateVideoJobsiteDialog();
+        initVideoJobsiteTableSort();
+        initVideoJobsiteRowSelect();
+        initVideoAcknowledgeDeleteDialog();
+        initUploadVideo();
+        initVideoFileClicker();
+    }
+    /* initialize uploadVideo dialog
+    */
+    function initUploadVideo() {
+        $("#dialog-uploadvideo").dialog({
+            resizable: false,
+            dialogClass: "no-close", 
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+        // set change notification events
+        $("#videosetname").on('input', updateVideoSetNames);
+        $("#segmentduration").change(updateVideoSetTableRows);
+    }    
+    /* cancel uploadVideo dialog
+    */
+    function cancelUploadVideoDialog() {
+        // close dialog
+        $("#dialog-uploadvideo").dialog("close");
+        
+        // call openJobsiteManager to reinit this page
+        openJobsiteManager();
+    }
+    /* upload video to server
+    */
+    function validateUploadVideoContent() {
+        var errorfield = document.getElementById('videoupload-errorfield');
+
+        // check for valid input fields
+        videoName = document.getElementById('videosetname').value;
+        if (typeof videoName === 'undefined' || videoName == null || videoName == "") {
+            errorfield.style.color = "#b5535f";
+            errorfield.innerHTML = "Error: Video name/description is required";
+            return;
+        }
+
+        // hide cancel and upload buttons
+        $("#cancelvideoupload").hide();
+        $("#uploadvideoset").hide();
+        // show downloading progress bar
+        $('#videoprogressbar').show();
+        $('#uploadingvideos').show();
+
+        // begin upload
+        beginVideoUpload(selectedFiles, videoName, startDate, numSegments);
+    }
+    function doneUploading() {
+        $("#completedvideoduration").hide();
+        $("#doneuploadingbtn").hide();
+
+        // close uploadVideo dialog
+        $("#dialog-uploadvideo").dialog("close");
+
+        // call openJobsiteManager to reinit this page
+        openJobsiteManager();
+    }
+    /* initialize file picker
+    */
+    function initVideoFileClicker() {
+        var vfileSelect = document.getElementById("uploadvideobtn"),
+        vfileElem = document.getElementById("videoFileElem");
+
+        vfileSelect.addEventListener("click", function (e) {
+            if (vfileElem) {
+                vfileElem.click();
+            }
+            e.preventDefault(); // prevent navigation propagation
+        }, false);
+    }
+    /* file picker handler
+    */
+    function handleVideoFiles(files) {
+        // validate, sort and save off files 
+        selectedFiles = validVideoFileSet(files);
+
+        if (selectedFiles.length) {            
+            // determine totalpayloadsize and startDate from first file in sequence
+            totalPayloadSize = 0;
+            var smallestfileno = "";
+            for (var i = 0, file; file = selectedFiles[i]; i++) {
+                totalPayloadSize += file.size;
+                
+                // get startDate and starttime from filename suffix
+                var fileparts = file.name.split(".");
+                var fileno = fileparts[fileparts.length-2];
+                if (fileno < smallestfileno || smallestfileno == "") {
+                    smallestfileno = fileno;
+                    var dateparts = fileparts[0].split("_");
+                    var datepart = dateparts[dateparts.length-2];
+                    var timepart = dateparts[dateparts.length-1];
+                    startTime = timepart.substring(0, 2) + ":" + timepart.substring(2, 4);
+                    startDate = datepart + " " + startTime;
+                }
+            }
+            
+            // populate jobsite detail in dialog
+            var jobsiteId = readCookie("currentjobsiteid");
+            var jobsiteLocation;
+            var jobsiteSitecode;
+            var table = document.getElementById("videojobsitestablerows");
+            for (var i = 0; i<table.rows.length; i++) {
+                var row = table.rows[i];
+                var cell = row.cells[0];
+                var cellattr = cell.getAttribute("id").split(";");
+                var cellid = cellattr[0];
+                if (cellid == jobsiteId) {
+                    document.getElementById('videojobsite').innerHTML = row.cells[0].innerHTML;
+                    document.getElementById('videodescription').innerHTML = row.cells[1].innerHTML;
+                    break;
+                }
+            }
+            totalPayloadSize = parseFloat(totalPayloadSize/1048576).toFixed(2);
+            document.getElementById('videostarttime').innerHTML = startDate;
+            document.getElementById('totaluploadfilesize').innerHTML = addCommas(totalPayloadSize) + "Mb";
+            $('#videosetname').val("");
+            document.getElementById('uploadvideoset').disabled = true;
+            videoName = "";
+            updateVideoSetTableRows();
+            
+            // hide cancel and upload buttons
+            $("#cancelvideoupload").show();
+            $("#uploadvideoset").show();
+            // show downloading progress bar
+            $('#videoprogressbar').hide();
+            $('#uploadingvideos').hide();
+
+            // open videoupload form
+            $("#dialog-uploadvideo").dialog("open");
+        } else {
+            showErrorDialog("No valid files selected, expected:\nsomeprefix_xxxx_xx_xx_xxxx.001.mp4\n...\nsomeprefix_xxxx_xx_xx_xxxx.00n.mp4");
+            // call openJobsiteManager to reinit this page
+            openJobsiteManager();
+        }
+    }
+    function updateVideoSetTableRows() {
+        var segmentduration = document.getElementById('segmentduration');
+        numSegments = segmentduration.options[segmentduration.selectedIndex].value;
+        
+        // delete any existing rows in table
+        var videostable = document.getElementById("videonamestable");
+        videostable.innerHTML = "";
+        
+        // determine resulting video names and duration, add each as a row in the table
+        var rem = selectedFiles.length % parseInt(numSegments);
+        var numvideos = Math.floor(selectedFiles.length / parseInt(numSegments));
+        if (rem) {
+            numvideos ++;
+        }
+        var segmentstarttime = startTime;
+        var segmentendtime = endtime(startTime, numSegments);
+        var duration = parseInt(numSegments);
+        for (var i=0; i<numvideos; i++) {
+            var row = videostable.insertRow(videostable.rows.length);
+            var cell = row.insertCell(0);
+            // if last video in set, adjust duration as necessary
+            if (i == numvideos-1 && rem) {
+                duration = rem;
+            }
+            segmentendtime = endtime(segmentstarttime, duration);
+            cell.innerHTML = videoName + "_" + segmentstarttime + "-" + segmentendtime;
+            cell = row.insertCell(1);
+            cell.innerHTML = duration + " hrs";
+            segmentstarttime = segmentendtime;
+        }
+    }
+    function updateVideoSetNames() {
+        videoName = $('#videosetname').val();
+        // update the name prefix for the resulting videos in the table
+        var videostable = document.getElementById("videonamestable");
+        for (var i = 0; i<videostable.rows.length; i++) {
+            var row = videostable.rows[i];
+            var namestr = row.cells[0].innerHTML.split("_");
+            var suffix = namestr[namestr.length-1];
+            row.cells[0].innerHTML = videoName + "_" + suffix;
+        }
+        // if videoName != "", enable upload
+        if (videoName.length) {
+            document.getElementById('uploadvideoset').disabled = false;
+        } else {
+            document.getElementById('uploadvideoset').disabled = true;
+        }
+    }
+    /* function determines the endtime accounting for 24 hour clock
+    */
+    function endtime(starttime, duration) {
+        var prefixstr = starttime.split(":");
+        var prefix = prefixstr[0];
+        var endtime = (parseInt(prefix)+duration) % 24;
+        return  str_pad_left(endtime, '0', 2) + ":" + prefixstr[1];
+    }
+    /* initialize placeholder jquery dialog 
+    */
+    function initCreateVideoJobsiteDialog() {
+        $("#dialog-createvideojobsite").dialog({
+            resizable: false,
+            dialogClass: "no-close",
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+        $("#videojobsite-sitecode").on('input', resetVideoJobsiteErrorField);
+        $("#videojobsite-location").on('input', resetVideoJobsiteErrorField);
+    }
+    /* initialize placeholder acknowledge close job dialog 
+    */
+    function initVideoAcknowledgeDeleteDialog() {
+        $("#dialog-videoacknowledgedelete").dialog({
+            resizable: false,
+            dialogClass: "no-close",
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+    }
+    function openVideoAcknowledgeDelete() {
+        $("#dialog-videoacknowledgedelete").dialog("open");
+    }
+    function cancelVideoDelete() {
+        // close dialog
+        $("#dialog-videoacknowledgedelete").dialog("close");
+    }
+    /* delete the current jobsite
+    */
+    function deleteVideoJobsite() {
+        var authToken = readCookie("authToken");
+        var jobsiteid = readCookie("currentjobsiteid");
+        var paramsString = METHODCALL_HEADER_PARAM_AUTHTOKEN + "=" + authToken + "&jobsiteid=" + jobsiteid;
+        $.ajax({
+            type: "GET",
+            url: "MethodCall.php/JobManager::DeleteJobSite",
+            data: paramsString,
+            dataType: "html",
+            cache: false,
+            success: function(result) {
+                jsonResponse = JSON.parse(result);
+                var response = jsonResponse['results']['response'];
+                if (response == "success") {
+                    // close acknowledge dialog
+                    $("#dialog-videoacknowledgedelete").dialog("close");
+                    
+                    // remove selected row from table, clear Current Jobsite 
+                    clearCurrentVideoJobsite();
+                } 
+                else {
+                    if (jsonResponse['results']['returnval']['resultstring'] == "login required") {
+                        // close this form, inform user and logout
+                        loginRequired();
+
+                        // close dialog
+                        $("#dialog-videoacknowledgedelete").dialog("close");                        
+                    } 
+                    else {
+                        showErrorDialog("Unknown server error, please try again");
+                    }
+                }
+            },
+            error: function (request, status, error) {
+                showErrorDialog("Server error: " + status);
+            }
+        });
+    }
+    /* clear the current job
+    */
+    function clearCurrentVideoJobsite() {
+        var jobsiteId = readCookie("currentjobsiteid");
+        
+        // erase currentjob cookies
+        eraseCookie("currentjobsiteid");
+        
+        // remove selected row from table
+        var table = document.getElementById("videojobsitestablerows");
+        for (var i = 0; i<table.rows.length; i++) {
+            var row = table.rows[i];
+            var cell = row.cells[0];
+            var cellid = cell.getAttribute("id").split(";",1);
+            // if a match delete row
+            if (cellid == jobsiteId) {
+                table.deleteRow(row.rowIndex);
+            }
+        }
+    }
+    /* initialize rowselect function
+    */
+    function initVideoJobsiteRowSelect() {
+        $('#videojobsitestablerows tbody tr').click(function() {
+            var tr = $(this).closest('tr')
+            var jobsiteid = $(tr).find('td').eq(0).attr("id").split(";",1);
+
+            // set current job and highlight selection
+            setCurrentVideoJobsite(jobsiteid);
+        });
+    }
+    /* function sets the page's Current Jobsite to reflect the selected row in the table
+    */
+    function setCurrentVideoJobsite(jobsiteId, jobsiteIdentifier) {
+        createCookie("currentjobsiteid", jobsiteId, 0);
+
+        // enable buttons that act on a selected job
+        document.getElementById('deletevideojobsitebtn').disabled = false;
+        document.getElementById('uploadvideobtn').disabled = false;
+//        document.getElementById('generatevideoreportsbtn').disabled = false;
+        
+        // highlight selected row and unhighlight previous selected row
+        var table = document.getElementById("videojobsitestablerows");
+        for (var i = 0; i<table.rows.length; i++) {
+            var row = table.rows[i];
+            var cell = row.cells[0];
+            var cellattr = cell.getAttribute("id").split(";");
+            var cellid = cellattr[0];
+            var issel = cellattr[1];
+            // if not a match 
+            if (cellid != jobsiteId) {
+                // if was highlighted, remove highlight
+                if (issel == "YES") {
+                    row.style.color = "#444444";
+                    cell.setAttribute("id", cellid+";NO");
+                }
+            }
+            // else if a match
+            else {
+                // if not highlighted, highlight it now
+                if (issel == "NO") {
+                    row.style.color = "#0453ff";
+                    cell.setAttribute("id", cellid+";YES");
+                }
+            }
+        }            
+    }
+    /* open createNewJobsite dialog
+    */
+    function createNewVideoJobsite() {
+        $("#videojobsite-sitecode").val("");
+        $("#videojobsite-location").val("");
+        resetVideoJobsiteErrorField();
+        $("#dialog-createvideojobsite").dialog("open");
+    }
+    /* cancel openNewJobsite dialog
+    */
+    function cancelNewVideoJobsiteDialog() {
+        // close dialog
+        $("#dialog-createvideojobsite").dialog("close");
+    }
+    /* validate inputs, and if valid post createNewJob inputs
+    */
+    function validVideoJobsiteInputs() {
+        var errorfield = document.getElementById('videojobsite-errorfield');
+
+        // check for valid input fields
+        var jobsitecode = document.getElementById('videojobsite-sitecode').value;
+        var jobsitelocation = document.getElementById('videojobsite-location').value;
+        if (typeof jobsitecode === 'undefined' || jobsitecode == null || jobsitecode == "" || 
+             typeof jobsitelocation === 'undefined' || jobsitelocation == null || jobsitelocation == "") {
+            errorfield.style.color = "#b5535f";
+            errorfield.innerHTML = "Error: job sitecode and location are required";
+            return false;
+        }
+        // valid inputs, proceed with call to server
+        else {
+            var jobId = readCookie('currentjobid');
+            var authToken = readCookie("authToken");
+            var priority = document.getElementById('countpriority');
+            var countpriority = priority.options[priority.selectedIndex].value;
+            var paramsString = METHODCALL_HEADER_PARAM_AUTHTOKEN + "=" + authToken + "&jobid=" + jobId + "&sitecode=" + jobsitecode + "&type=VideoData" + "&description=" + jobsitelocation + "&countpriority=" + countpriority + "&reportformat=STANDARD";
+            $.ajax({
+                type: "GET",
+                url: "MethodCall.php/Job::CreateJobSite",
+                data: paramsString,
+                dataType: "html",
+                cache: false,
+                success: function(result) {
+                    jsonResponse = JSON.parse(result);
+                    var response = jsonResponse['results']['response'];
+                    if (response == "success") {
+                        // get projectid and save as cookie
+                        var jobsiteid = jsonResponse['results']['returnval']['jobsiteid'];
+                        
+                        // add new jobsite row to table
+                        var currentDate = Date();
+                        currentDate = $.datepicker.formatDate("yy-mm-dd", new Date(currentDate));
+
+                        // populate each column in jobs table
+                        var jobsitestable = document.getElementById('videojobsitestablerows');
+                        var row = jobsitestable.insertRow(0);
+                        var cell = row.insertCell(0);
+                        cell.innerHTML = jobsitecode;
+                        cell.setAttribute("id", jobsiteid+";NO;NO");
+                        cell = row.insertCell(1);
+                        cell.innerHTML = jobsitelocation;
+                        cell = row.insertCell(2);
+                        cell.innerHTML = currentDate;
+                        cell = row.insertCell(3);                        
+                        cell.innerHTML = countpriority;
+                        cell = row.insertCell(4);
+                        cell.innerHTML = "0";
+                        cell = row.insertCell(5);
+                        cell.innerHTML = "0";
+
+                        // close dialog
+                        $("#dialog-createvideojobsite").dialog("close"); 
+                        
+                        // reinit jobselect to capture the new row
+                        initVideoJobsiteRowSelect();                      
+                        
+                    }
+                    // else handle error for user 
+                    else {
+                        if (jsonResponse['results']['returnval']['resultstring'] == "login required") {
+                            // close this form, inform user and logout
+                            loginRequired();
+
+                            // close dialog
+                            $("#dialog-createvideojobsite").dialog("close");
+                        } 
+                        else if (jsonResponse['results']['returnval']['resultstring'] == "alreadyexists") {
+                            errorfield.style.color = "#b5535f";
+                            errorfield.innerHTML = "A jobsite with this sitecode already exists";
+                        }
+                        else {
+                            errorfield.style.color = "#b5535f";
+                            errorfield.innerHTML = "Server error response: " + jsonResponse['results']['returnval']['resultstring'];
+                        }
+                    }
+                },
+                error: function (request, status, error) {
+                    showErrorDialog("Server error: " + status);
+                }
+            });
+        }
+    }
+    /* initialize table sort function
+    */
+    function initVideoJobsiteTableSort() {
+        $('#sort-sitecode, #sort-location, #sort-updated, #sort-direction, #sort-priority, #sort-numvideos, #sort-numlayouts').click(function() {
+            var table = $("#videojobsitestablerows");
+            var rows = table.find('tr').toArray().sort(comparer($(this).index()))
+            this.asc = !this.asc
+            if (!this.asc) {
+                rows = rows.reverse()
+            }
+            for (var i = 0; i < rows.length; i++) {
+                table.append(rows[i])
+            }
+        });
+    }
+    /* done here, close this content and open job manager
+    */
+    function exitVideoJobsitesManager() {
+        // hide jobsiteManager
+        $(".jobsites-content").hide();
+        
+        openJobManager();
+    }
+    function resetVideoJobsiteErrorField() {    
+        var errorfield = document.getElementById('videojobsite-errorfield');
+        if (errorfield.innerText != "Enter new jobsite details") {
+            errorfield.style.color = "#000000";
+            errorfield.innerHTML = "Enter new jobsite details";
+        }
+    }
+    function resetVideoUploadErrorField() {    
+        var errorfield = document.getElementById('videoupload-errorfield');
+        if (errorfield.innerText != "Enter new jobsite details") {
+            errorfield.style.color = "#000000";
+            errorfield.innerHTML = "Enter jobsite video information";
+        }
+    }
+ </script>
+
+<!-- placeholder for uploadVideo dialog -->
+<div class="dialog-overlay" id="dialog-uploadvideo">
+  <div class="dialog-wrapper">
+    <div class="dialog-content">
+      <h2>Upload Video for Jobsite</h2>
+      <br />
+      <div id="videoupload-errorfield">Enter jobsite video information</div>
+      <fieldset>
+        <table>
+          <tr><td>Jobsite:</td><td><span id="videojobsite"></span></td></tr>
+          <tr><td>Description:</td><td><span id="videodescription"></span></td></tr>
+          <tr><td>Video capture start:</td><td><span id="videostarttime"></span></td></tr>
+        </table>
+        <br />
+        <label for="videosetname">Video Set Name:
+          <input type="text" name="videosetname" id="videosetname" placeholder="Video set name/description" required />
+        </label>
+        <label for="duration" style="margin-right: 15px">Combine into videos with duration:
+          <select name="segmentduration" id="segmentduration" style="margin-left: 10px">
+            <option value="1" selected="selected">1 hour</option>
+            <option value="2">2 hours</option>
+            <option value="3">3 hours</option>
+            <option value="4">4 hours</option>
+            <option value="5">5 hours</option>
+            <option value="6">6 hours</option>
+			<option 
+          </select>
+        </label>        
+        <label style="margin-top: 10px">Resulting video set to upload:</label>
+        <table  style="margin-left: 10px; font-size: .75em" id="videonamestable"></table>
+        <div id="videonamelist"></div>
+        <label style="margin-top: 10px">Total size of payload: <span id="totaluploadfilesize"></span></label>
+        <label style="margin-left: 10px; font-size: .75em">Video upload time varies based on connection speed (~2-3 min per 170Mb video).</label>
+        <div id="uploadingvideos" style="margin-top: 10px; display: none">Uploading video, transfer rate: <span id="uploadrate"></span></div>
+        <div id="videoprogressbar" style="margin-top: 10px; display: none"><div class="progress-label" style="text-align: center;"></div></div>
+        <div id="completedvideoduration" style="display: none; text-align: center; margin-top: 20px"><span id="uploadduration"></span></div>
+      </fieldset>
+      <br />
+      <div id="dlgbuttons">
+        <button id="cancelvideoupload" onclick="cancelUploadVideoDialog()">Cancel</button>
+        <button id="uploadvideoset" onclick="validateUploadVideoContent()">Upload</button>
+        <button id="doneuploadingbtn" style="display: none" onclick="doneUploading()">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- placeholder for acknowledgeclose dialog -->
+<div class="dialog-overlay" id="dialog-videoacknowledgedelete">
+  <div class="dialog-wrapper">
+    <div class="dialog-content">
+      <h2>Delete Site</h2>
+      <br />
+      <fieldset>
+        <label>Are you sure you want to delete this site?</label>
+      </fieldset>
+      <br />
+      <div id="dlgbuttons">
+        <button onclick="cancelVideoDelete()">Cancel</button>
+        <button onclick="deleteVideoJobsite()">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+ 
+<!-- placeholder for addJobsite dialog -->
+<div class="dialog-overlay" id="dialog-createvideojobsite">
+  <div class="dialog-wrapper">
+    <div class="dialog-content">
+      <h2>Add Site</h2>
+      <br />
+      <div id="videojobsite-errorfield">Enter new site details</div>
+      <fieldset>
+        <label for="videojobsite-sitecode">Sitecode
+          <input type="text" name="videojobsite-sitecode" id="videojobsite-sitecode" placeholder="Jobsite identifier" required />
+        </label>
+        <label for="videojobsite-location">Location
+          <input type="text" name="videojobsite-location" id="videojobsite-location" placeholder="Jobsite location description" required />
+        </label>
+        <label for="priority" style="margin-right: 15px">Count Priority: 
+          <select name="countpriority" id="countpriority" style="margin-left: 10px">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3" selected="selected">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+          </select>
+        </label>
+      </fieldset>
+      <br />
+      <div id="dlgbuttons">
+        <button onclick="cancelNewVideoJobsiteDialog()">Cancel</button>
+        <button onclick="validVideoJobsiteInputs()">Create</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- JobManager screen -->
+<div>
+  <div id="idaxtitle"><img style="float: right" src="images/IDAX_2-blue-35w.png" width="35"/>Current Job: <span id="videojobsitesidentifiername"> </span></div>
+  <button class="hdrbutton" onclick="exitVideoJobsitesManager()">Done</button>
+  <button class="hdrbutton" style="float: left" onclick="createNewVideoJobsite()">Add Site</button>
+  <button class="hdrbutton" id="deletevideojobsitebtn" style="float: left" onclick="openVideoAcknowledgeDelete()">Delete Site</button>
+  <input type="file" id="videoFileElem" multiple accept="video/mp4" style="display:none" onchange="handleVideoFiles(this.files)">
+  <button class="hdrbutton" id="uploadvideobtn" style="float: left">Upload Videos</button>
+  <button class="hdrbutton" style="float: left" id="generatevideoreportsbtn" onclick="generateVideoReports()">Generate Reports</button>
+  <br />
+  <div id="videojobsites">VideoData Jobsites</div>
+  <table id="videojobsitestable">
+    <tr>
+      <td>
+        <table id="videojobsitestablehead">
+          <col id="col-sitecode"/>
+          <col id="col-location"/>
+          <col id="col-updated"/>
+          <col id="col-priority"/>
+          <col id="col-numvideos"/>
+          <col id="col-numlayouts"/>
+          <col id="col-endspace"/>
+          <tr>
+            <td id="sort-sitecode">Sitecode</td>
+            <td id="sort-location">Location</td>
+            <td id="sort-updated">Updated</td>
+            <td id="sort-priority">Priority</td>
+            <td id="sort-numvideos"># Videos</td>
+            <td id="sort-numlayouts"># Layouts</td>
+            <td></td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <div id="videojobsitestablediv">
+          <table id="videojobsitestablerows">
+          <col id="col-sitecode"/>
+          <col id="col-location"/>
+          <col id="col-updated"/>
+          <col id="col-priority"/>
+          <col id="col-numvideos"/>
+          <col id="col-numlayouts"/>
+          </table>
+        </div>
+      </td>
+    </tr>
+  </table>
+</div>

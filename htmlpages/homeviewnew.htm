@@ -1,0 +1,447 @@
+<link href="css/homeviewnew.css" rel="stylesheet" type="text/css" />
+<!--<link href="css/dialogform.css" rel="stylesheet" type="text/css" />-->
+
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCNNUr1fqFte42tIHfRWL_lhzyrt6fe_CU&callback=initMap"></script>
+<script src="//code.jquery.com/ui/1.11.4/jquery-ui.js"></script>
+
+<script src="js/homeviewnew/contextviews/viewfiller.js" type="text/javascript"></script>
+
+<!--All of the proxy files-->
+<script src="js/JobSiteProxy.js" type="text/javascript"></script>
+<script src="js/JobSiteManagerProxy.js" type="text/javascript"></script>
+<script src="js/TaskProxy.js" type="text/javascript"></script>
+<script src="js/JobProxy.js" type="text/javascript"></script>
+<script src="js/JobManagerProxy.js" type="text/javascript"></script>
+
+<script src="js/homeviewnew/ProxyHelper.js" type="text/javascript"></script>
+<script src="js/homeviewnew/NewHomeViewHelpers.js" type="text/javascript"></script>
+
+<script src="js/homeviewnew/contextviews/searchview.js" type="text/javascript"></script>
+<script src="js/homeviewnew/googlemapsfunc.js" type="text/javascript"></script>
+<script src="js/homeviewnew/uihelpers.js" type="text/javascript"></script>
+<script src="js/homeviewnew/contextviews/joblistview.js" type="text/javascript"></script>
+<script src="js/homeviewnew/contextviews/jobview.js" type="text/javascript"></script>
+<script src="js/homeviewnew/contextviews/taskview.js" type="text/javascript"></script>
+<script src="js/homeviewnew/contextviews/tasklistview.js" type="text/javascript"></script>
+<script src="js/homeviewnew/contextviews/placejobsitesview.js" type="text/javascript"></script>
+<script src="js/homeviewnew/contextviews/jobsitelistview.js" type="text/javascript"></script>
+<script src="js/homeviewnew/contextviews/jobsiteview.js" type="text/javascript"></script>
+<script src="js/homeviewnew/contextviews/finishjobsites" type="text/javascript"></script>
+<script>
+    ////////////
+    /*GLOBALS*/
+    ///////////
+    
+    var g_currentView;
+    
+    
+    ///////
+    /*UI*/
+    //////
+    
+    function occupyWithView(fillView) {
+        // First clear the context menu.
+        $("#contextInfoView").html("");
+        $(".header-title").text(fillView.getTitle());
+        
+        g_currentView = fillView;
+        
+        fillView.fillContent($("#contextInfoView"));
+    }
+    
+    function navToJobView(jobIndex) {
+        var selectedJob = null;
+        for (var i = 0; i < g_viewableJobs.length; ++i) {
+            if (g_viewableJobs[i].jobid == jobIndex) {
+                selectedJob = g_viewableJobs[i];
+                break;
+            }
+        }
+        
+        if (selectedJob == null && g_selectedJob != null && (g_selectedJob.jobid == jobIndex))
+            selectedJob = g_selectedJob;
+        
+        if (selectedJob != null)
+            occupyWithView(new JobViewFiller(selectedJob));
+    }
+    
+    function navToFinishJobSitesView() {
+        occupyWithView(new FinishJobSitesView());
+    }
+    
+    function navToTasksView() {
+        occupyWithView(new TasksViewFiller(g_selectedJob));
+    }
+                       
+    function navToJobsView() {
+        occupyWithView(new JobsViewFiller());
+    }
+    
+    function navToJobsViewRenderAll() {
+        var jobsViewFiller = new JobsViewFiller();
+        jobsViewFiller.renderAll = true;
+        occupyWithView(jobsViewFiller);
+    }
+    
+    function navToCreateJobView() {
+        occupyWithView(new JobViewFiller());
+    }
+    
+    function navToTaskView(taskId) {
+        if (taskId == undefined || taskId == null) {
+            occupyWithView(new TaskViewFiller());
+        }
+        else {
+            // Get the choosen task.
+            var useTask = null;
+            for (var i = 0; i < g_viewableTasks.length; ++i) {
+                if (g_viewableTasks[i].taskid == taskId) {
+                    useTask = g_viewableTasks[i];
+                    useTask.jobId = g_selectedJob.jobid;
+                    break;
+                }
+            }
+            
+            if (useTask == null && g_selectedTask != null && (g_selectedTask.taskid == taskId)) {
+                useTask = g_selectedTask;
+            }
+            
+            if (useTask != null) {
+                occupyWithView(new TaskViewFiller(useTask));
+            }
+        }
+    }
+    
+    function navToPlaceJobSitesView() {
+        occupyWithView(new PlaceJobSitesView());
+    }
+    
+    function navToJobSitesView() {
+        occupyWithView(new JobSitesView(g_selectedTask));
+    }
+    
+    function navToJobSiteView(jobSiteId) {
+        if (jobSiteId == undefined || jobSiteId == null) {
+            occupyWithView(new JobSiteView(g_selectedTask));
+        }
+        else {
+            // Get the choosen job site.
+            var useJobSite = null;
+            for (var i = 0; i < g_viewableJobSites.length; ++i) {
+                if (g_viewableJobSites[i].jobsiteid == jobSiteId) {
+                    useJobSite = g_viewableJobSites[i];
+                    break;
+                }
+            }
+            
+            if (useJobSite != null) {
+                occupyWithView(new JobSiteView(useJobSite));
+            }
+        }
+    }
+    
+    /*Fired whenever the user double clicks on the map*/
+    function onMapDblClick(e) {
+        if (g_currentView.createJobSite != undefined) {
+            // The current view can create a job site.
+            // Create the job site and if it is successful then continue.
+            g_currentView.createJobSite(function() {
+                // This will only be called if the site was succesfully placed. 
+                g_selectedTask["lat"] = e.latLng.lat();
+                g_selectedTask["lng"] = e.latLng.lng();
+                
+                navToJobSiteView();
+            });
+        }
+        else {
+            // The current view is the place job site prompt.
+            // Switch to the create job site view.
+            g_selectedTask["lat"] = e.latLng.lat();
+            g_selectedTask["lng"] = e.latLng.lng();
+            
+            navToJobSiteView();
+        }
+    }
+    
+    
+    function loadSearchBar() {
+        var optionsHtml = "";
+        for (var i = 0; i < getStudyTypes().length; ++i) {
+            optionsHtml += "<option value='" + i + "'>" + getStudyTypes()[i] + "</option>";
+        }
+        
+        optionsHtml += "<option selected value='" + (getStudyTypes().length) + "'>All</option>";
+        
+        $("#searchStudyTypeSelect").html(optionsHtml);
+        
+        optionsHtml = "";
+        for (var i = 0; i < getOfficeTypes().length; ++i) {
+            optionsHtml += "<option value='" + i + "'>" + getOfficeTypes()[i] + "</option>";
+        }
+        
+        optionsHtml += "<option selected value='" + (getOfficeTypes().length) + "'>All</option>";
+        
+        $("#searchOfficeSelect").html(optionsHtml);
+        
+    }
+    
+    function searchBarSearchClick() {
+        // Get the filters the user specified.
+        var searchQuery = $("#searchTextBox").val();
+        var studyType = $("#searchStudyTypeSelect").val();
+        var office = $("#searchOfficeSelect").val();
+        var sinceDate = $("#sinceTextBox").val();
+        
+        // Are these the "All" filters? 
+        
+        if (studyType == getStudyTypes().length) {
+            studyType = null;
+        }
+        
+        
+        if (office == getOfficeTypes().length) {
+            office = null;
+        }
+        
+        if (searchQuery === "") {
+            searchQuery = null;
+        }
+        
+        if (sinceDate === "" || !verifyDate(sinceDate)) {
+            sinceDate = null;
+        }
+        
+        if (studyType != null && !isInt(studyType)) {
+            displayFatalError("Invalid study type index.");
+            return;
+        }
+        
+        if (office != null && !isInt(office)) {
+            displayFatalError("Invalid office type index.");
+            return;
+        }
+        
+        if (studyType != null)
+            studyType = convertIndexToStudyType(studyType);
+        if (office != null) 
+            office = convertIndexToOfficeType(office);
+        
+        setFilter(searchQuery, studyType, sinceDate);
+        
+        // Re-render based on the search result.
+        renderMapMarkers(true);
+        
+        // Display the results in the jobs list view.
+        navToJobsView();
+    }
+    
+    function clearSearchBtnClick(shouldSkipRender) {
+        // Clear the ui for the filter.
+        $("#searchTextBox").val("");
+        $("#sinceTextBox").val("");
+        $("#searchStudyTypeSelect").val(getStudyTypes().length);
+        $("#searchOfficeSelect").val(getOfficeTypes().length);
+        
+        // Clear the search filter.
+        clearFilter();
+        
+        if (shouldSkipRender === undefined || !shouldSkipRender) {
+            // Render all of the markers.
+            renderMapMarkers(true);
+
+            // Reload the jobs view.
+            navToJobsView();
+        }
+    }
+    
+    function disableSearchFunc() {
+        // Disable the search button.
+        $("#searchBtn").prop("disabled", true);
+        // Clear all of the applied search filters.
+        clearSearchBtnClick(true);
+        // Render all of the map markers.
+        renderMapMarkers();
+    }
+    
+    function enableSearchFunc() {
+        $("#searchBtn").prop("disabled", false);
+    }
+    
+    function onMarkerClickEventHandler() {
+        var markerId = this.get("markerId");  
+        // The markerId will correspond to the job site id.
+        // Fetch the appropriate job site.
+        JobSiteGetInfo(markerId, INFO_LEVEL_BASIC, function (context, textStatus, response, resultStr, jobDetails, jobSiteDetails) {
+            if (textStatus == "success" && response == "success") {
+                jobSiteDetails = FixJobSiteValues(jobSiteDetails);
+                g_selectedTask = jobSiteDetails;
+                g_selectedTask["lat"] = jobSiteDetails.latitude;
+                g_selectedTask["lng"] = jobSiteDetails.longitude;
+
+                ProxyHelperGetTask(jobDetails.jobid, jobSiteDetails.taskid, function(task) {
+                    if (task != null) {
+                        g_viewableTasks = [];
+                        g_viewableTasks.push(task);
+
+                        g_viewableJobs = [];
+                        g_viewableJobs.push(jobDetails);
+                        
+                        g_selectedJob = jobDetails;
+
+                        navToJobSiteView();
+                    }
+                    else {
+                        // This must be legacy data. 
+                        g_viewableTasks = null;
+                        navToJobSiteView();
+                        //displayFatalError("Could not fetch task for job site!");
+                    }
+                }, null);
+            }
+            else {
+                displayFatalError("Could not fetch job site!", resultStr);
+            }
+        }, null);
+    }
+    
+    function initDialogs() {  
+        $("#errorDialog").dialog({
+            dialogClass: "no-close"
+        });
+        
+        $("#errorDialog").hide();
+        
+        $("#confirmDialog").dialog({
+            dialogClass: "no-close" 
+        });
+        
+        $("#confirmDialog").hide();
+    }
+    
+    $(document).ready(function () {
+        // Initialize the none map related UI components.
+        initDialogs();
+    });
+    
+    /*Initalizes the Google Map UI component*/
+    function initMap() {
+        var mapStyles = [
+            {
+                featureType: "poi",
+                stylers: [
+                    { visibility: "off" }
+                ]
+            },
+            {
+                featureType: "road",
+                elementType: "geometry",
+                stylers: [
+                    { lightness: 100 },
+                    { hue: "#00ffe6" },
+                    { visibility: "simplified" },
+                    { saturation: -20 }
+                ]
+            }
+        ];
+        
+        g_map = new google.maps.Map(document.getElementById('googleMap'), {
+            center: { lat: 47.67, lng: -122.12 },
+            zoom: 18,
+            mapTypeControlOptions: {
+              mapTypeIds: [google.maps.MapTypeId.ROADMAP, google.maps.MapTypeId.SATELLITE]
+            }
+        });
+        
+        g_map.setOptions({styles: mapStyles});
+        
+        g_filter = null;
+        
+        // Add all of the appropriate event handlers to the map.
+        g_map.addListener("idle", viewportChanged);
+        g_markerOnClickEventHandler = onMarkerClickEventHandler;
+        
+        initFilter();
+        //renderMapMarkers();
+        
+        loadSearchBar();
+        
+        navToJobsView();
+    }
+    
+    function fatalErrorProgress() {
+        $("#errorDialog").hide();
+        var shouldLogUserOut = $("#shouldLogUserOut").html();
+        if (shouldLogUserOut == "yes") {
+            userLogout();
+        }
+        else {
+            location.reload(true);
+        }
+    }
+    
+    function showDatePickerDialog() {
+        $("#datePickerDialog").show();
+    }
+    
+    function datePickedProgress() {
+        $("#datePickerDialog").hide();
+    }
+</script>
+
+<!-- homeScreenNew view -->
+
+<div id="containerView">
+    
+    <div class="dialog-overlay" id="errorDialog">
+      <div class="dialog-wrapper">
+        <div class="dialog-content">
+          <h2>Error</h2>
+          <br />
+          <div id="errorFieldMsg">Fatal error.</div>
+          <div id="shouldLogUserOut" style="display: none;">no</div>
+          <div id="dlgbuttons">
+            <button onclick="fatalErrorProgress();">Ok</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="dialog-overlay" id="confirmDialog">
+      <div class="dialog-wrapper">
+        <div class="dialog-content">
+          <h2>Are You Sure?</h2>
+          <br />
+          <div id="errorFieldMsg">There is no going back on this action.</div>
+          <div id="dlgbuttons">
+            <button id="confirmDialogProgressBtn">Yes</button>
+            <button id="confirmDialogCancelBtn" onclick='closeConfirmDialog();'>No</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="searchArea">
+        <div id="searchControlContainer">
+            <input placeholder="Search query" type="text" id="searchTextBox" />
+            <label>Study Type</label>
+            <div class="select-style">
+                <select id="searchStudyTypeSelect"></select>
+            </div>
+            <label>Office</label>
+            <div class="select-style">
+                <select id="searchOfficeSelect"></select>
+            </div>>
+            <label class="date-label">Since Date:</label>
+            <input type="text" id="sinceTextBox" class="date-picker-input" />
+            <button id="searchBtn" onclick="searchBarSearchClick();">Search</button>
+            <button onclick="clearSearchBtnClick();">Clear</button>
+        </div>
+    </div>
+    
+    <div id="mainViewContainer">
+        <div id="googleMap"></div>
+        <div id="contextView">
+            <p class="header-title">Title goes here.</p>
+            <div id="contextInfoView"></div>
+        </div>
+    </div>
+</div>
+

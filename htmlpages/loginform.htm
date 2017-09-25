@@ -1,0 +1,241 @@
+<link href="css/loginform.css" rel="stylesheet" type="text/css" />
+<link href="css/dialogform.css" rel="stylesheet" type="text/css" />
+
+<script>
+    /*catch enter key for validate and submit form
+    */
+    function keyCatch(val){
+        if(event.keyCode=='13'){
+            var uname = document.getElementById('username').value;
+            var pword = document.getElementById('password').value;
+
+            // test that the username and pword fields match regular expression requirements
+            if (uname.length && pword.length) {
+                userLogin();
+            } 
+            // else is username length, set focus to password
+            else if (uname.length) {
+                document.getElementById('password').focus();
+            } 
+            // else set focus to username field
+            else {
+                document.getElementById('username').focus();
+            }
+        }        
+    }
+
+    /* initialize placeholder jquery dialog 
+    */
+    function initResetMessageDialog() {
+        $("#dialog-resetmessage").dialog({
+            resizable: false,
+            dialogClass: "no-close",
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+    }
+    function openResetMessageDialog() {
+        // show message dialog
+        $("#dialog-resetmessage").dialog("open");
+    }
+    function cancelResetMessageDialog() {
+        // close dialog
+        $("#dialog-resetmessage").dialog("close");
+    }
+    /* initialize placeholder jquery dialog 
+    */
+    function initResetPasswordDialog() {
+        $("#dialog-resetpassword").dialog({
+            resizable: false,
+            dialogClass: "no-close",
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+    }
+    /* open changePassword dialog
+    */
+    function openResetPasswordDialog() {
+        // if a username entered in login form, populate the resetusername field
+        var uname = document.getElementById('username').value;
+        if (typeof uname !== 'undefined' && uname != null && uname != "") {
+            document.getElementById('resetusername').value = uname;
+        }
+        $("#resetusername").on('input', resetPasswordErrorField);
+    
+        // show message dialog
+        $("#dialog-resetpassword").dialog("open");
+    }
+    /* cancel changePassword dialog
+    */
+    function cancelResetPasswordDialog() {
+        // close dialog
+        $("#dialog-resetpassword").dialog("close");
+    }
+    /* send the password reset request
+    */
+    function resetPassword() {
+        var errorfield = document.getElementById('resetpassword-errorfield');
+        var uname = document.getElementById('resetusername').value;
+        
+        if (!validEmail(uname)) {
+            errorfield.style.color = "#b5535f";
+            errorfield.innerHTML = "Username requires a valid email address - xxx@xx.xx";
+            return false;
+        }
+        var paramsString = '&email=' + uname;
+        $.ajax({
+            type: "GET",
+            url: "MethodCall.php/AccountManager::SendPasswordResetLink",
+            data: paramsString,
+            contentType: "application/json; charset=utf-8",
+            dataType: "html",
+            cache: false,
+            success: function (result) {
+                jsonResponse = JSON.parse(result);
+                var response = jsonResponse['results']['response'];
+                if (response == "success") {
+                    // close resetpassword dialog
+                    $("#dialog-resetpassword").dialog("close");
+                    // show message to the user saying password reset was sent to email account
+                    openResetMessageDialog();
+                }
+                // login failed 
+                else {
+                    errorfield.style.color = "#b5535f";
+                    errorfield.innerHTML = "Unable to reset password, registered user not found";
+                }
+            },
+            error: function (request, status, error) {
+                errorfield.style.color = "#b5535f";
+                errorfield.innerHTML = "Server error: " + status;
+            }
+        });    
+    }
+
+    function userLogin (isAlternateLogin) {
+        var errorfield = document.getElementById('errorfield');
+        var uname = document.getElementById('username').value;
+        var pword = document.getElementById('password').value;
+
+        // test that the username and pword fields match regular expression requirements
+        if (!validEmail(uname)) {
+            errorfield.style.color = "#b5535f";
+            errorfield.innerHTML = "Username requires a valid email address - xxx@xx.xx";
+            return false;
+        }
+        if (!validPassword(pword)) {
+            errorfield.style.color = "#b5535f";
+            errorfield.innerHTML = "Incorrect password format";
+            return false;
+        }
+
+        var paramsString = '&email=' + uname + '&password=' + pword;
+        $.ajax({
+            type: "GET",
+            url: "MethodCall.php/AccountManager::Login",
+            data: paramsString,
+            contentType: "application/json; charset=utf-8",
+            dataType: "html",
+            cache: false,
+            success: function (result) {
+                jsonResponse = JSON.parse(result);
+                var response = jsonResponse['results']['response'];
+                if (response == "success") {
+                    InitializeLoginSession (jsonResponse, uname, isAlternateLogin);
+                    // hide the login form
+                    $(".login-content").hide();
+                }
+                // login failed 
+                else {
+                    errorfield.style.color = "#b5535f";
+                    errorfield.innerHTML = "Access denied: Invalid credentials";
+                }
+            },
+            error: function (request, status, error) {
+//                alert(request);
+//                alert(status);
+//                alert(error); return false;
+                errorfield.style.color = "#b5535f";
+                errorfield.innerHTML = "Server error: " + status;
+            }
+        });
+    }
+
+    function resetPasswordErrorField() {
+        var errorfield = document.getElementById('resetpassword-errorfield');
+        if (errorfield.innerText != "Enter the registered email address for this account") {
+            errorfield.style.color = "#000000";
+            errorfield.innerHTML = "Enter the registered email address for this account";
+        }
+    }
+    function resetErrorField() {
+        var errorfield = document.getElementById('errorfield');
+        if (errorfield.innerText != "Enter login credentials") {
+            errorfield.style.color = "#000000";
+            errorfield.innerHTML = "Enter login credentials";
+        }
+    }
+      
+</script>
+
+<!-- placeholder for usermessage dialog -->
+<div class="dialog-overlay" id="dialog-resetmessage">
+  <div class="dialog-wrapper">
+    <div class="dialog-content">
+      <h2>Password Reset</h2>
+      <br />
+      <fieldset>
+        <label>An email will be been sent to the email address of this account to set a new password.<br /><br />(Note if you don't find the email in your inbox, check your junk mail folder in case your spam filter doesn't recognize the host domain.)</label>
+      </fieldset>
+      <br />
+      <div id="dlgbuttons">
+        <button onclick="cancelResetMessageDialog()">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- placeholder for resetpassword dialog -->
+<div class="dialog-overlay" id="dialog-resetpassword">
+  <div class="dialog-wrapper">
+    <div class="dialog-content">
+      <h2>Reset Password</h2>
+      <br />
+      <div id="resetpassword-errorfield">Enter the registered email address for this account</div>
+      <fieldset>
+        <label for="resetusername">
+          Username:
+          <input type="text" name="resetusername" id="resetusername" placeholder="Registered email address" pattern="[a-zA-Z0-9._%+-]+@[a-zA-z0-9.-]+\.[a-zA-Z]{2,4}" required />
+        </label>
+      </fieldset>
+      <br />
+      <div id="dlgbuttons">
+        <button onclick="cancelResetPasswordDialog()">Cancel</button>
+        <button onclick="resetPassword()">Reset</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div>
+  <div style="text-align: center"><img src="images/IDAX_2-blue-tagline-100w.png" width="100" /></div>
+  <br />
+  <div id="errorfield">Enter login credentials</div>
+  <fieldset required onkeypress="keyCatch(3)">
+    <label for="username">
+      Username:
+      <input type="text" name="username" id="username" placeholder="Registered email address" pattern="[a-zA-Z0-9._%+-]+@[a-zA-z0-9.-]+\.[a-zA-Z]{2,4}" required />
+    </label>
+    <label for="password">
+      Password:
+      <input type="password" name="password" id="password" placeholder="Your personal password" pattern="(?=\d*)(?=[a-z]*)(?=[A-Z]*).{8,20}" required />
+    </label>
+  </fieldset>
+  <a href="#" onclick="openResetPasswordDialog()" style="font-size: .75em" >Forgot Password</a>
+  <div id="dlgbuttons">
+    <button onclick="userLogin(false)">Login</button>
+<!--    <button onclick="userLogin(true)">Login New</button> -->
+  </div>
+</div>    

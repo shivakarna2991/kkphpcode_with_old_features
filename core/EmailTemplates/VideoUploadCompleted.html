@@ -1,0 +1,83 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta charset="utf-8" />
+    <title>IDAX</title>
+    <style type="text/css">
+      #ingesttable {
+        vertical-align: middle;
+        color: #444444;
+        font-size: .85em;
+        border-collapse: collapse;
+      }
+      #ingesttable tr:nth-child(2n+1) {
+        background: #f4f4f4;
+      }
+    </style>
+  </head>
+  
+  <body>
+    <div id="main_page">
+      <p style="margin-left:15px">Video Upload/Ingestion Results</p>
+      <p style="margin-left:15px; text-decoration: underline">Video Job Site Details</p>
+      <table style="margin-left:15px; margin-top: -15px">
+          <tbody>
+              <tr><td>ID:</td><td>@JOBSITEID@</td></tr>
+              <tr><td>Site Code:</td><td>@JOBSITESITECODE@</td></tr>
+              <tr><td>Location:</td><td>@JOBSITEDESCRIPTION@</td></tr>
+              <tr><td>Camera position:</td><td>@CAMERALOCATION@</td></tr>
+          </tbody>
+      </table>
+
+      <p style="margin-left:15px; text-decoration: underline">Video Details</p>
+      <table style="margin-left:15px; margin-top: -15px">
+          <tbody>
+              <tr><td>ID:</td><td>@VIDEOID@</td></tr>
+              <tr><td>Name:</td><td>@NAME@</td></tr>
+              <tr><td>File prefix:</td><td>@FILEPREFIX@</td></tr>
+              <tr><td>File size:</td><td>@FILESIZE@</td></tr>
+              <tr><td>Capture start time:</td><td>@CAPTURESTARTTIME@</td></tr>
+              <tr><td>Capture end time:</td><td>@CAPTUREENDTIME@</td></tr>
+              <tr><td>Video duration:</td><td>@CAPTUREDURATION@</td></tr>
+          </tbody>
+      </table>              
+
+      <p style="margin-left:15px; text-decoration: underline">Ingestion Summary</p>
+      <table style="margin-left:15px; margin-top: -15px">
+          <tbody>
+              <tr><td>Final Status:</td><td>@STATUS@</td></tr>
+              <tr><td>File upload duration:</td><td>@FILEUPLOADTIME@</td></tr>
+              <tr><td>Ingestion started:</td><td>@INGESTIONTIMESTARTED@</td></tr>
+              <tr><td>Ingestion ended:</td><td>@INGESTIONTIMEENDED@</td></tr>
+          </tbody>
+      </table>
+
+      <p style="margin-left:15px; text-decoration: underline">Ingestion Phase Durations</p>
+      <div>
+        <table id="ingesttable" style="margin-left:15px; margin-top: -15px; text-align: center">
+            <thead>
+                <tr>
+                  <th style="background: #aaaaaa; width: 150px">Phase</th>
+                  <th style="background: #aaaaaa; width: 200px">Start Time</th>
+                  <th style="background: #aaaaaa; width: 200px">End Time</th>
+                  <th style="background: #aaaaaa; width: 100px">Duration</th>
+                </tr>
+            </thead>
+            <tfoot>
+                <tr>
+                  <td style="background: #dddddd;"></td>
+                  <td style="background: #dddddd;"></td>
+                  <td style="background: #dddddd; width: 120px; text-align: right">Total duration:</td>
+                  <td style="background: #dddddd;">@INGESTIONDURATION@</td>
+                </tr>
+            </tfoot>
+            <tbody>
+                @INGESTIONPHASES@
+            </tbody>
+        </table>
+    </div>
+      <br />
+    </div> <!-- main-page -->
+  </body>
+</html>

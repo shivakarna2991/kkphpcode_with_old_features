@@ -1,0 +1,333 @@
+/*Overload some of the base styling attributes*/ 
+#main_page {
+    display: block !important;
+    height: 100%;
+    overflow-y: hidden;
+}
+
+.home-content {
+    height: calc(100% - 85px);
+    margin-top: 40px;
+}
+
+
+/*Styling for homeviewnew.htm*/
+#googleMap {
+    width: 66%;
+    height: 100%;
+    background-color: white;
+    float: left;
+}
+
+#contextView {
+    width: 34%;
+    background-color: #ecf0f1;
+    height: 100%;
+    overflow-y: auto;
+    float: right;
+}
+
+#containerView {
+    display: block;
+    height: 100%;
+}
+
+#contextInfoView {
+    width: 100%;
+    height: auto;
+    background-color: #ecf0f1;
+    padding-top: 10px;
+    padding-bottom: 20px;
+}
+
+#inputEnterArea {
+    margin-left: 1em;
+}
+
+#searchArea {
+    height: 45px;
+    width: 100%;
+    background-color: black;
+    padding-top: 1px;
+}
+
+#mainViewContainer {
+    height: calc(100% - 45px);
+    display: block;
+    width: 100%;
+}
+
+
+#searchControlContainer {
+    display: flex;
+    height: 100%;
+    width: 100%;
+    margin-top: 8px;
+}
+
+#searchControlContainer button {
+    height: 23px;
+    padding-top: 3px;
+    margin-left: 20px;
+}
+
+#searchControlContainer label {
+    font-size: 12px;
+    color: white;
+    position: absolute;
+    margin-left: 20px;
+    margin-top: -2px;
+}
+
+#searchControlContainer input[type="text"] {
+    width: 200px;
+    margin-left: 20px;
+    
+    height: 15px;
+    padding: 5px;
+}
+
+
+#sinceTextBox {
+    width: 100px !important;
+    margin-top: 13px;
+    height: 10px !important;
+}
+
+#additionalInputField {
+    width: 25px;
+    display: inline;
+}
+
+#searchControlContainer .select-style {
+    margin-left: 20px;
+    margin-top: 12px;
+}
+
+#loadingSection {
+    
+} 
+
+#errorFieldMsg {
+    color: #E74C3C;
+}
+
+.header-title {
+    font-size: 2em;
+    padding-top: 10px;
+    background-color: white;
+    border-bottom: 1px solid black;
+}
+
+ul li button {
+    background-color: transparent;
+    color: black;
+    width: 95%;
+    margin-left: 10px;
+}
+
+.delete-btn {
+    background-color: #E74C3C;
+}
+
+#controlButtonsContainer {
+    margin-bottom: 10px;
+}
+
+#controlButtonsContainer button {
+    width: 100px;
+    margin-left: 5px;
+    margin-right: 5px;
+}
+
+.horizontal-align-container {
+    display: inline;
+}
+
+.error-msg {
+    color: #E74C3C;
+}
+
+.success-msg {
+    color: ##27AE60;
+}
+
+.date-label {
+    margin-top: -21px !important;
+}
+
+.date-picker-input {
+    
+}
+
+.expandable-list-section {
+    
+}
+
+.expandable-list-button-section {
+    
+}
+
+.expandable-list-button-section button {
+    width: 50px;
+}
+
+.expandable-list-element {
+    
+}
+
+.expandable-list-element input {
+    width: 30%;
+    margin-right: 20px;
+    display: table-cell;
+}
+
+.expandable-list-date {
+    
+}
+
+.expandable-list-single {
+    
+}
+
+.expandable-list-time {
+    
+}
+
+.ui-datepicker {
+    background-color: gray;
+}
+
+ul {
+    list-style: none;
+}
+
+textarea {
+    resize: vertical;
+}
+
+input {
+    opacity: 1 !important;
+}
+
+.checkbox-container {
+    margin-bottom: 10px;
+}
+
+.checkbox-container span {
+    margin-left: 5px;
+}
+
+.study-type-display {
+    margin-top: 10px;
+    text-align: left;
+    margin-bottom: 10px;
+}
+
+.select-style {
+    border: 1px solid #ccc;
+    width: 120px;
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 10px;
+    background: #fafafa url("data:image/png;base64,R0lGODlhDwAUAIABAAAAAP///yH5BAEAAAEALAAAAAAPABQAAAIXjI+py+0Po5wH2HsXzmw//lHiSJZmUAAAOw==") no-repeat 90% 50%;
+}
+
+.select-style select {
+    padding: 5px 8px;
+    width: 130%;
+    border: none;
+    box-shadow: none;
+    background: transparent;
+    background-image: none;
+    -webkit-appearance: none;
+}
+
+.select-style select:focus {
+    outline: none;
+}
+
+.popup-prompt {
+    font-size: 0.75em;
+}
+
+
+#dlgbuttons {
+  text-align: center;
+}
+
+/* radio button styles
+*/
+#radiobtns {
+  margin-left: 25px;
+}
+
+div.dialog-overlay {
+  background-color: rgba(0,0,0,.25);
+  bottom: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  position: fixed;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+div.dialog-overlay > div.dialog-wrapper {
+    align-self: center;
+    background-color: rgba(0,0,0,.25);
+    border-radius: 2px;
+    width: 550px;
+    margin-left: auto;
+    margin-right: auto;
+    margin-top: 200px;
+}    
+div.dialog-overlay > div.dialog-wrapper > div.dialog-content {
+  background-color: rgb(255,255,255);
+  border-radius: 2px;
+  padding: 24px;    
+  position: relative;
+}        
+div.dialog-overlay > div.dialog-wrapper > div.dialog-content > h3 {
+  color: rgb(0,0,0);
+  font-family: 'Varela Round', sans-serif;
+  font-size: 1.8em;
+  margin: 0 0 1.25em;
+  padding: 0;
+}
+
+.ui-dialog-titlebar-close {
+    display: none !important;
+}
+
+.ui-datepicker {
+    background-color: #DADADA;
+    -webkit-touch-callout: none; /* iOS Safari */
+    -webkit-user-select: none;   /* Chrome/Safari/Opera */
+    -khtml-user-select: none;    /* Konqueror */
+    -moz-user-select: none;      /* Firefox */
+    -ms-user-select: none;       /* Internet Explorer/Edge */
+    user-select: none; 
+}
+
+.ui-icon {
+    text-decoration: underline;
+    color: #5F5F5F;
+}
+
+.ui-icon:hover {
+    cursor: pointer;
+    color: rgba(0, 101, 202, 0.8);
+}
+
+.ui-datepicker-next {
+    margin-left: 5px;
+}
+
+.ui-state-default {
+    color: #5F5F5F;
+}
+
+.ui-state-default:hover {
+    color: rgba(0, 101, 202, 0.8);
+}

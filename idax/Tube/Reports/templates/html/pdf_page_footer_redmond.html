@@ -1,0 +1,46 @@
+<!DOCTYPE HTML>
+<html lang='en-US'>
+  <head>
+    <script>
+      // function retrieves the GET params which inlude the header/footer parameters (e.g. page no.)
+      //  it assigns them to elements by class name in the body below
+      function subst() {
+          var vars={};
+          var x=window.location.search.substr(1).split('&');
+          for (var i in x) {
+              var z=x[i].split('=',2);vars[z[0]] = unescape(z[1]);
+          }
+          var x=['frompage','topage','page','webpage','section','subsection','subsubsection'];
+          for (var i in x) {
+              var y = document.getElementsByClassName(x[i]);
+              for (var j=0; j<y.length; ++j) {
+                  y[j].textContent = vars[x[i]];
+              }
+          }
+      }
+    </script>
+    <style>
+      @font-face {
+          font-family: 'IDAXFont';
+          src: url('@_IDAX_REPORTS_PATH@/templates/assets/fonts/Calibri.ttf');
+          font-weight: normal;
+          font-style: normal;
+      }    
+    </style>
+  </head>
+  <body style="border:0; margin: 0;" onload="subst()">
+    <div style="width: 100%;">
+      <table style="font-family: 'IDAXFont'; width: 100%; border-collapse: collapse;" cellspacing="0" cellpadding="0">
+        <tr>
+          <td style="width: 90px"></td>
+          <td></td>
+          <td style="padding-right:0px; width: 10px; text-align: right;"></td>
+        </tr>
+        <tr>
+          <td colspan="2">@officeemail@</td>
+          <td><span class="page"></span></td>
+        </tr>
+      </table>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,946 @@
+<link href="css/accountmanager.css" rel="stylesheet" type="text/css" />
+<link href="css/dialogform.css" rel="stylesheet" type="text/css" />
+
+<script>
+    /* global vars */
+    var selectedFname = "";
+    var selectedLname = "";
+    var selectedEmail = "";
+    var selectedRole = "";
+    var selectedAccountid = "";
+    var selectedRating = "";
+    /* initialize this form
+    */
+    function initAccountManagerForm() {
+        initCreateAccountDialog();
+        initEditAccountDialog();
+        initAccountRowSelect();
+        initAccountTableSort();
+        initDeactivateAccountDialog();
+        initReactivateAccountDialog();
+        initAcctMessageDialog();
+    }
+    /* initialize placeholder jquery dialog 
+    */
+    function initAcctMessageDialog() {
+        $("#dialog-acctmessage").dialog({
+            resizable: false,
+            dialogClass: "no-close",
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+    }
+    /* open changePassword dialog
+    */
+    function openAcctMessageDialog(message) {
+        // set user message
+        document.getElementById('acctmessagelabel').innerHTML = message;
+
+        // show message dialog
+        $("#dialog-acctmessage").dialog("open");
+    }
+    /* cancel changePassword dialog
+    */
+    function cancelAcctMessageDialog() {
+        // close dialog
+        $("#dialog-acctmessage").dialog("close");
+    }
+    /* initialize rowSelect function to recognize when a user clicks a row
+    */
+    function initAccountRowSelect() {
+        $('#acctstablerows tbody tr').click(function() {
+            var tr = $(this).closest('tr');
+            var accountid = $(tr).find('td').eq(0).attr("id").split(";",1);
+            var status = $(tr).find('td').eq(4).text();
+            var selectedUser = $(tr).find('td').eq(1).text();
+
+            // enable/disable appropriate buttons that act on a account job
+            switch (status) {
+                case "INACTIVE":
+                    document.getElementById('deactivatebtn').disabled = true;
+                    document.getElementById('reactivatebtn').disabled = false;
+                    document.getElementById('editaccountbtn').disabled = true;
+                    break;
+                case "ACTIVE":
+                case "REGISTERING":
+                    // don't allow deactivating ourself
+                    if (selectedUser != readCookie("userName")) {
+                        document.getElementById('deactivatebtn').disabled = false;
+                    } else {
+                        document.getElementById('deactivatebtn').disabled = true;
+                    }
+                    document.getElementById('reactivatebtn').disabled = true;
+                    document.getElementById('editaccountbtn').disabled = false;
+                    break;
+                default:
+                    document.getElementById('deactivatebtn').disabled = true;
+                    document.getElementById('reactivatebtn').disabled = true;
+                    document.getElementById('editaccountbtn').disabled = true;
+                    break;
+            }
+
+            // highlight selected row and unhighlight previous selected row
+            var table = document.getElementById("acctstablerows");
+            for (var i = 0; i<table.rows.length; i++) {
+                var row = table.rows[i];
+                var cell = row.cells[0];
+                var cellattr = cell.getAttribute("id").split(";");
+                var cellid = cellattr[0];
+                var issel = cellattr[1];
+                // if not a match 
+                if (cellid != accountid) {
+                    // if was highlighted, remove highlight
+                    if (issel == "YES") {
+                        row.style.color = "#444444";
+                        cell.setAttribute("id", cellid+";NO");
+                    }
+                }
+                // else if a match
+                else {
+                    // if not highlighted, highlight it now
+                    if (issel == "NO") {
+                        row.style.color = "#0453ff";
+                        cell.setAttribute("id", cellid+";YES");
+                    }
+                }
+            }
+        });
+    }
+    /* initialize table sort function
+    */
+    function initAccountTableSort() {
+        $('#sort-name, #sort-email, #sort-role, #sort-rating, #sort-status, #sort-lastlogin, #sort-created, #sort-registered').click(function() {
+            var table = $("#acctstablerows");
+            var rows = table.find('tr').toArray().sort(comparer($(this).index()));
+            this.asc = !this.asc;
+            if (!this.asc) {
+                rows = rows.reverse();
+            }
+            for (var i = 0; i < rows.length; i++) {
+                table.append(rows[i]);
+            }
+        });
+    }
+    /* initialize placeholder jquery dialog 
+    */
+    function initCreateAccountDialog() {
+        $("#dialog-createaccount").dialog({
+            resizable: false,
+            dialogClass: "no-close",
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+    }
+    /* open createNewAccount dialog
+    */
+    function createNewAccount() {
+        // initialize create account with empty values
+        document.getElementById('firstname').value = "";
+        document.getElementById('lastname').value = "";
+        document.getElementById('email').value = "";
+        document.getElementById('userrole').checked = 'checked';
+
+        // set change event for input fields to reset errorfield when neessary
+        $("#firstname").on('input', resetCreateErrorField);
+        $("#lastname").on('input', resetCreateErrorField);
+        $("#email").on('input', resetCreateErrorField);
+
+        $("#dialog-createaccount").dialog("open");
+    }
+    /* cancel createNewAccount dialog
+    */
+    function cancelNewAccountDialog() {
+        // close dialog
+        $("#dialog-createaccount").dialog("close");
+    }
+    /* validate inputs, and if valid post createNewAccount inputs
+    */
+    function validNewAccountInputs() {
+        var errorfield = document.getElementById('createaccount-errorfield');
+        var fname = document.getElementById('firstname').value;
+        var lname = document.getElementById('lastname').value;
+        var email = document.getElementById('email').value;
+        var userType  = "";
+        if (document.getElementById('userrole').checked) {
+            userType = "USER";
+        } else if (document.getElementById('qcrole').checked) {
+            userType = "QC";
+        } else if (document.getElementById('designerrole').checked) {
+            userType = "DESIGNER";
+        } else if (document.getElementById('projectmanagerrole').checked) {
+            userType = "PROJECT MANAGER";
+        } else {
+            userType = "ADMIN";
+        }
+
+        // make sure one name at least has non-whitespace chars
+        var fnameTest = fname.replace(/^\s+|\s+$/g, '');
+        var lnameTest = lname.replace(/^\s+|\s+$/g, '');
+        if (fnameTest.length === 0 && lnameTest.length === 0) {
+            errorfield.style.color = "#b5535f";
+            errorfield.innerHTML = "One First or Last name is required";
+            return false;
+        }
+
+        // test that the username matches email regular expression requirements
+        var re1 = new RegExp("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}");
+        if (!re1.test(email)) {
+            errorfield.style.color = "#b5535f";
+            errorfield.innerHTML = "Username requires a valid email address - xxx@xx.xx";
+            return false;
+        }
+
+        // valid inputs, proceed with call to server
+        var authToken = readCookie("authToken");
+        var rating = document.getElementById('userrating');
+        var countRating = rating.options[rating.selectedIndex].value;
+        var paramsString = METHODCALL_HEADER_PARAM_AUTHTOKEN + "=" + authToken + "&firstname=" + fname + "&lastname=" + lname + "&email=" + email + "&role=" + userType + "&rating=" + countRating;
+        $.ajax({
+            type: "GET",
+            url: "MethodCall.php/AccountManager::CreateAccount",
+            data: paramsString,
+            dataType: "html",
+            cache: false,
+            success: function(result) {
+                var jsonResponse = JSON.parse(result);
+                if (jsonResponse['results']['response'] == "success") {
+                    // get accountid and save as cookie
+                    var accountid = jsonResponse['results']['returnval']['accountid'];
+
+                    // add new job row to table
+                    var currentDate = Date();
+                    currentDate = $.datepicker.formatDate("yy-m-d", new Date(currentDate));
+
+                    var acctstable = document.getElementById('acctstablerows');
+                    var row = acctstable.insertRow(0);
+                    var cell = row.insertCell(0);
+                    cell.innerHTML = fname + " " + lname;
+                    cell.setAttribute("id", accountid+";NO");
+                    cell = row.insertCell(1);
+                    cell.innerHTML = email;
+                    cell = row.insertCell(2);
+                    cell.innerHTML = userType;
+                    cell = row.insertCell(3);
+                    cell.innerHTML = countRating;
+                    cell = row.insertCell(4);
+                    cell.innerHTML = "REGISTERING";
+                    cell = row.insertCell(5);
+                    cell.innerHTML = "-";
+                    cell = row.insertCell(6);
+                    cell.innerHTML = currentDate;
+                    cell = row.insertCell(7);
+                    cell.innerHTML = "-";
+
+                    // re-initRowSelect function to include new row added
+                    initAccountRowSelect();
+
+                    // close dialog
+                    $("#dialog-createaccount").dialog("close");
+
+                    // let admin know a email will be sent to the email address to complete the registration
+                    openAcctMessageDialog("The account has been created.&#13;&#13;An email will be sent to " + email + " with a link the user must click to enter a password and complete the account registration.<br /><br />(Note the user may need to check their junk mail folder in case their spam filter doesn't recognize the host domain.)");
+                }
+                // else handle error for user 
+                else {
+                    if (jsonResponse['results']['returnval']['resultstring'] == "login required") {
+                        // close this form, inform user and logout
+                        loginRequired();
+
+                        // close dialog
+                        $("#dialog-createaccount").dialog("close");
+                        $(".accounts-content").hide();
+                    } else if (jsonResponse['results']['returnval']['resultstring'] == "Failed to create account.  SQL Error=1062.") {
+                        showErrorDialog("Error creating account: a user with email "+email+" already exists");
+                    } else {
+                        showErrorDialog("Error creating account: " + jsonResponse['results']['returnval']['resultstring']);
+                    }
+                }
+            },
+            error: function (request, status, error) {
+                showErrorDialog("Server error: " + status);
+            }
+        });
+
+        return true;
+    }
+    /* initialize placeholder jquery dialog 
+    */
+    function initEditAccountDialog() {
+        $("#dialog-editaccount").dialog({
+            resizable: false,
+            dialogClass: "no-close",
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+        // set change event for input fields to enable/disable save button as appropriate
+        $("#editfirstname").on('input', setSaveState);
+        $("#editlastname").on('input', setSaveState);
+        $("#editemail").on('input', setSaveState);
+        $("#edituserrole").on('click', setSaveState);
+        $("#editqcrole").on('click', setSaveState);
+        $("#editdesignerrole").on('click', setSaveState);
+        $("#editprojectmanagerrole").on('click', setSaveState);
+        $("#editadminrole").on('click', setSaveState);
+        $("#edituserrating").on('click', setSaveState);
+    }
+    /* open editNewAccount dialog
+    */
+    function openEditAccount() {
+        // find selected row, update with changes
+        var table = document.getElementById("acctstablerows");
+        var accountid = "";
+        for (var i = 0; i<table.rows.length; i++) {
+            var row = table.rows[i];
+            var cell = row.cells[0];
+            var cellattr = cell.getAttribute("id").split(";");
+            var cellid = cellattr[0];
+            var issel = cellattr[1];
+            if (issel == "YES") {
+                accountid = cellid;
+                break;
+            }
+        }
+
+        // if valid accountid
+        if (accountid !== "") {
+            var authToken = readCookie("authToken");
+            var paramsString = METHODCALL_HEADER_PARAM_AUTHTOKEN + "=" + authToken + "&accountid=" + accountid;
+            $.ajax({
+                type: "GET",
+                url: "MethodCall.php/AccountManager::GetUserAccount",
+                data: paramsString,
+                dataType: "html",
+                cache: false,
+                success: function(result) {
+                    var jsonResponse = JSON.parse(result);
+                    if (jsonResponse['results']['response'] == "success") {
+                        // save off selected user initial values
+                        selectedFname = jsonResponse['results']['returnval']['account']['firstname'];
+                        selectedLname = jsonResponse['results']['returnval']['account']['lastname'];
+                        selectedEmail = jsonResponse['results']['returnval']['account']['email'];
+                        selectedRole = jsonResponse['results']['returnval']['account']['role'];
+                        selectedRating = jsonResponse['results']['returnval']['account']['rating'];
+                        selectedAccountid = accountid;
+                        
+                        // fill in editAccount dialog with selected user details from table
+                        document.getElementById('editfirstname').value = selectedFname;
+                        document.getElementById('editlastname').value = selectedLname;
+                        document.getElementById('editemail').value = selectedEmail;
+
+                        // set default radio button based on current role
+                        document.getElementById('edituserrole').checked = false;
+                        document.getElementById('editqcrole').checked = false;
+                        document.getElementById('editdesignerrole').checked = false;
+                        document.getElementById('editprojectmanagerrole').checked = false;
+                        document.getElementById('editadminrole').checked = false;
+                        if (selectedRole == "USER") {
+                            document.getElementById('edituserrole').checked = true;
+                        } else if (selectedRole == "QC") {
+                            document.getElementById('editqcrole').checked = true;
+                        } else if (selectedRole == "DESIGNER") {
+                            document.getElementById('editdesignerrole').checked = true;
+                        } else if (selectedRole == "PROJECT MANAGER") {
+                            document.getElementById('editprojectmanagerrole').checked = true;
+                        } else {
+                            document.getElementById('editadminrole').checked = true;
+                        }
+                        var rating = document.getElementById('edituserrating');
+                        rating.selectedIndex = selectedRating-1;
+                        
+                        // disable save until changes
+                        document.getElementById('editsavebtn').disabled = true;
+
+                        // open the edit acount dialog
+                        $("#dialog-editaccount").dialog("open");
+                    }
+                    else {
+                        if (jsonResponse['results']['returnval']['resultstring'] == "login required") {
+                            // close this form, inform user and logout
+                            loginRequired();
+
+                            // close accounts form
+                            $(".accounts-content").hide();
+                        }
+                        else {
+                            showErrorDialog("Error retreiving account: " + jsonResponse['results']['returnval']['resultstring']);
+                        }
+                    }
+                },
+                error: function (request, status, error) {
+                    showErrorDialog("Server error: " + status);
+                }
+            });
+        } else {
+            return false;
+        }
+
+        return true;
+    }
+    /* cancel editAccountDialog
+    */
+    function cancelEditAccountDialog() {
+        // close dialog
+        $("#dialog-editaccount").dialog("close");
+    }
+    /* validate inputs, and if valid post createNewAccount inputs
+    */
+    function saveEditAccountInputs() {
+        var errorfield = document.getElementById('editaccount-errorfield');
+        var fname = document.getElementById('editfirstname').value.trim();
+        var lname = document.getElementById('editlastname').value.trim();
+        var email = document.getElementById('editemail').value.trim();
+        var userType  = "";
+        if (document.getElementById('edituserrole').checked) {
+            userType = "USER";
+        } else if (document.getElementById('editqcrole').checked) {
+            userType = "QC";
+        } else if (document.getElementById('editdesignerrole').checked) {
+            userType = "DESIGNER";
+        } else if (document.getElementById('editprojectmanagerrole').checked) {
+            userType = "PROJECT MANAGER";
+        } else {
+            userType = "ADMIN";
+        }
+
+        // make sure one name at least has non-whitespace chars
+        var fnameTest = fname.replace(/^\s+|\s+$/g, '');
+        var lnameTest = lname.replace(/^\s+|\s+$/g, '');
+        if (fnameTest.length === 0 && lnameTest.length === 0) {
+            errorfield.style.color = "#b5535f";
+            errorfield.innerHTML = "One First and/or Last name is required";
+            return false;
+        }
+        
+        // test that the username matches email regular expression requirements
+        if (!validEmail(email)) {
+            errorfield.style.color = "#b5535f";
+            errorfield.innerHTML = "Username requires a valid email address - xxx@xx.xx";
+            return false;
+        }
+
+        // valid inputs, proceed with call to server
+        var authToken = readCookie("authToken");
+        var rating = document.getElementById('edituserrating');
+        var countRating = rating.options[rating.selectedIndex].value;
+        var paramsString = METHODCALL_HEADER_PARAM_AUTHTOKEN + "=" + authToken + "&accountid=" + selectedAccountid + "&firstname=" + fname + "&lastname=" + lname + "&email=" + email + "&role=" + userType + "&rating=" + countRating;
+        $.ajax({
+            type: "GET",
+            url: "MethodCall.php/AccountManager::UpdateUserAccount",
+            data: paramsString,
+            dataType: "html",
+            cache: false,
+            success: function(result) {
+                var jsonResponse = JSON.parse(result);
+                if (jsonResponse['results']['response'] == "success") {
+                    // find selected row, update with changes#sort-status
+                    var table = document.getElementById("acctstablerows");
+                    for (var i = 0; i<table.rows.length; i++) {
+                        var row = table.rows[i];
+                        var cell = row.cells[0];
+                        var cellattr = cell.getAttribute("id").split(";");
+                        var cellid = cellattr[0];
+                        if (cellid == selectedAccountid) {
+                            cell.innerHTML = fname + " " + lname;
+                            row.cells[1].innerHTML = email;
+                            row.cells[2].innerHTML = userType;
+                            row.cells[3].innerHTML = countRating;
+                        }
+                    }
+
+                    // close the edit dialog
+                    $("#dialog-editaccount").dialog("close");
+                    
+                    // if this admin account is our own, update the usermenu and cookies with the changes
+                    if (selectedEmail == readCookie("userName")) {
+                        // update user's name field on menu and in saved cookies
+                        createCookie("userName", email);
+                        createCookie("firstName", fname);
+                        createCookie("lastName", lname);
+                        showUserMenu();
+                    }
+                    
+                    // save the changed values to selectedAccount vars
+                    selectedFname = fname;
+                    selectedLname = lname;
+                    selectedRole = userType;
+                    // if email changed, let admin know a email will be sent to validate the change
+                    if (selectedEmail != email) {
+                        openAcctMessageDialog("Changes to the account have been saved.<br /><br />An email will be sent to " + email + " with a link to click for confirmation or registration. The user must confirm/register the new email address before it can be used.<br /><br />(Note the user may need to check their junk mail folder in case their spam filter doesn't recognize the host domain.)");
+                    } else {
+                        openAcctMessageDialog("Changes to the account have been saved.");
+                    }
+                    selectedEmail = email;
+                    
+                }
+                // else handle error for user
+                else {
+                    if (jsonResponse['results']['returnval']['resultstring'] == "login required") {
+                        // close this form, inform user and logout
+                        loginRequired();
+
+                        // close dialog
+                        $("#dialog-editaccount").dialog("close");
+                        $(".accounts-content").hide();
+                    }
+                    else {
+                        // test error dialog
+                        showErrorDialog("Error changing account: " + jsonResponse['results']['returnval']['resultstring']);
+                    }
+                }
+            },
+            error: function (request, status, error) {
+                showErrorDialog("Server error: " + status);
+            }
+        });
+
+        return true;
+    }
+    /* enable save button if any field values have been changed
+    */
+    function setSaveState() {
+        var currentRole = "";
+        if (document.getElementById('edituserrole').checked) {
+            currentRole = "USER";
+        } else if (document.getElementById('editqcrole').checked) {
+            currentRole = "QC";
+        } else if (document.getElementById('editdesignerrole').checked) {
+            currentRole = "DESIGNER";
+        } else if (document.getElementById('editprojectmanagerrole').checked) {
+            currentRole = "PROJECT MANAGER";
+        } else {
+            currentRole = "ADMIN";
+        }
+        
+        var rating = document.getElementById('edituserrating');
+        var countRating = rating.options[rating.selectedIndex].value;
+
+        // if the current user account data has been changed, enable save button
+        document.getElementById('editsavebtn').disabled = (selectedFname == document.getElementById('editfirstname').value &&
+                                                            selectedLname == document.getElementById('editlastname').value &&
+                                                            selectedEmail == document.getElementById('editemail').value &&
+                                                            selectedRole == currentRole && selectedRating == countRating);
+
+        // reset errorfield if needed
+        var errorfield = document.getElementById('editaccount-errorfield');
+        if (errorfield.innerText != "Enter account changes below") {
+            errorfield.style.color = "#000000";
+            errorfield.innerHTML = "Enter account changes below";
+        }
+    }
+    
+    /* initialize placeholder acknowledge deactivate account dialog 
+    */
+    function initDeactivateAccountDialog() {
+        $("#dialog-deactivateaccount").dialog({
+            resizable: false,
+            dialogClass: "no-close",
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+    }
+    function openDeactivateAccount() {
+        $("#dialog-deactivateaccount").dialog("open");
+    }
+    function cancelDeactivateAccount() {
+        $("#dialog-deactivateaccount").dialog("close");
+    }
+    /* close the Current Job (sets it to inactive on the server, removes it from the table and clears the Current Job)
+    */
+    function DeactivateAccount() {
+        // get accountid of selected row
+        var table = document.getElementById("acctstablerows");
+        var accountid = "";
+        var row = "";
+        var cell = "";
+        for (var i = 0; i<table.rows.length; i++) {
+            row = table.rows[i];
+            cell = row.cells[0];
+            var cellattr = cell.getAttribute("id").split(";");
+            var cellid = cellattr[0];
+            var issel = cellattr[1];
+            if (issel == "YES") {
+                accountid = cellid;
+                break;
+            }
+        }
+        
+        // if we have a valid accountid
+        if (accountid !== "") {
+            var authToken = readCookie("authToken");
+            var paramsString = METHODCALL_HEADER_PARAM_AUTHTOKEN + "=" + authToken + "&accountid=" + accountid;
+            $.ajax({
+                type: "GET",
+                url: "MethodCall.php/AccountManager::DeactivateUserAccount",
+                data: paramsString,
+                dataType: "html",
+                cache: false,
+                success: function(result) {
+                    var jsonResponse = JSON.parse(result);
+                    if (jsonResponse['results']['response'] == "success") {
+                        // update row with new account state
+                        row.cells[3].innerHTML = "INACTIVE";
+                        // flip the reactivate/deactivate buttons
+                        document.getElementById('deactivatebtn').disabled = true;
+                        document.getElementById('reactivatebtn').disabled = false;
+                        // close deactivate account dialog
+                        $("#dialog-deactivateaccount").dialog("close");
+                    }
+                    else {
+                        if (jsonResponse['results']['returnval']['resultstring'] == "login required") {
+                            // close this form, inform user and logout
+                            loginRequired();
+
+                            // close form and this dialog
+                            $("#dialog-deactivateaccount").dialog("close");
+                            $(".accounts-content").hide();
+                        }
+                        else {
+                            showErrorDialog("Error deactivating account: " + jsonResponse['results']['returnval']['resultstring']);
+                        }
+                    }
+                },
+                error: function (request, status, error) {
+                    showErrorDialog("Server error: " + status);
+                }
+            });
+        } else {
+            return false;
+        }
+
+        return true;
+    }
+    /* initialize placeholder acknowledge reactivate account dialog 
+    */
+    function initReactivateAccountDialog() {
+        $("#dialog-reactivateaccount").dialog({
+            resizable: false,
+            dialogClass: "no-close",
+            autoOpen: false,
+            show: 'fade',
+            modal: true
+        });
+    }
+    function openReactivateAccount() {
+        $("#dialog-reactivateaccount").dialog("open");
+    }
+    function cancelReactivateAccount() {
+        $("#dialog-reactivateaccount").dialog("close");
+    }
+   /* close the Current Job (sets it to inactive on the server, removes it from the table and clears the Current Job)
+    */
+    function ReactivateAccount() {
+        // get accountid of selected row
+        var table = document.getElementById("acctstablerows");
+        var accountid = "";
+        var row = "";
+        var cell = "";
+        for (var i = 0; i<table.rows.length; i++) {
+            row = table.rows[i];
+            cell = row.cells[0];
+            var cellattr = cell.getAttribute("id").split(";");
+            var cellid = cellattr[0];
+            var issel = cellattr[1];
+            if (issel == "YES") {
+                accountid = cellid;
+                break;
+            }
+        }
+        
+        // if we have a valid accountid
+        if (accountid !== "") {
+            var authToken = readCookie("authToken");
+            var paramsString = METHODCALL_HEADER_PARAM_AUTHTOKEN + "=" + authToken + "&accountid=" + accountid;
+            $.ajax({
+                type: "GET",
+                url: "MethodCall.php/AccountManager::ActivateUserAccount",
+                data: paramsString,
+                dataType: "html",
+                cache: false,
+                success: function(result) {
+                    var jsonResponse = JSON.parse(result);
+                    if (jsonResponse['results']['response'] == "success") {
+                        // close reactivate account dialog
+                        $("#dialog-reactivateaccount").dialog("close");
+                        // update row with new account state
+                        row.cells[3].innerHTML = "REGISTERING";
+                        // flip the reactivate/deactivate buttons
+                        document.getElementById('deactivatebtn').disabled = false;
+                        document.getElementById('reactivatebtn').disabled = true;
+                        // put up message to let user know a register email will be sent to the user
+                        openAcctMessageDialog("The account has been re-activated.<br /><br />An email will be sent to " + selectedEmail + " with a link to re-register. The user must re-register before the account can be accessed.<br /><br />(Note the user may need to check their junk mail folder in case their spam filter doesn't recognize the host domain.)");
+                    }
+                    else {
+                        if (jsonResponse['results']['returnval']['resultstring'] == "login required") {
+                            // close this form, inform user and logout
+                            loginRequired();
+
+                            // close form and this dialog
+                            $("#dialog-reactivateaccount").dialog("close");
+                            $(".accounts-content").hide();
+                        }
+                        else {
+                            showErrorDialog("Error reactivating account: " + jsonResponse['results']['returnval']['resultstring']);
+                        }
+                    }
+                },
+                error: function (request, status, error) {
+                    showErrorDialog("Server error: " + status);
+                }
+            });
+        } else {
+            return false;
+        }
+
+        return true;
+    }
+    /* we're done here, close form and go back to homeview
+    */
+    function closeAccountManagement() {
+        $(".accounts-content").fadeToggle("fast");
+        openHomeView();
+    }
+    function resetCreateErrorField() {
+        var errorfield = document.getElementById('createaccount-errorfield');
+        if (errorfield.innerText != "Enter new account details") {
+            errorfield.style.color = "#000000";
+            errorfield.innerHTML = "Enter new account details";
+        }
+    }
+ </script>
+<!-- placeholder for usermessage dialog -->
+<div class="dialog-overlay" id="dialog-acctmessage">
+  <div class="dialog-wrapper">
+    <div class="dialog-content">
+      <h2>Request Completed</h2>
+      <br />
+      <fieldset>
+        <label id="acctmessagelabel"></label>
+      </fieldset>
+      <br />
+      <div id="dlgbuttons">
+        <button onclick="cancelAcctMessageDialog()">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- placeholder for editAccount dialog -->
+<div class="dialog-overlay" id="dialog-editaccount">
+  <div class="dialog-wrapper">
+    <div class="dialog-content" style="width: 600px">
+      <h2>Edit User Account</h2>
+      <br />
+      <div id="editaccount-errorfield">Enter account changes below</div>
+      <fieldset>
+        <label for="editfirstname">First Name
+          <input type="text" name="editfirstname" id="editfirstname" placeholder="Name" required />
+        </label>
+        <label for="editlastname">Last Name
+          <input type="text" name="editlastname" id="editlastname" placeholder="Name" required />
+        </label>
+        <label for="editemail">Email address
+          <input type="text" name="editemail" id="editemail" placeholder="Registered email address" pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,4}" required />
+        </label>
+        <br />
+        <label>User Role</label>
+        <div id="radiobtns">
+          <div>
+            <input name="role" type="radio" id="edituserrole"/><label for="edituserrole"><span><span></span></span>User - count videos</label>
+          </div>
+          <div>
+            <input name="role" type="radio" id="editqcrole"/><label for="editqcrole"><span><span></span></span>QC User - count videos, QC counts</label>
+          </div>
+          <div>
+            <input name="role" type="radio" id="editdesignerrole"/><label for="editdesignerrole"><span><span></span></span>Designer - count videos, QC counts, Design layouts </label>
+          </div>
+          <div>
+            <input name="role" type="radio" id="editprojectmanagerrole"/><label for="editprojectmanagerrole"><span><span></span></span>Project Manager - all of the above, Manage Jobs/Jobsites</label>
+            <div style="margin-bottom:5px; margin-left: 25px; font-size:0.8em">(Process tubedata, upload videos, gen reports, set/view status)</div>
+          </div>
+          <div>
+            <input name="role" type="radio" id="editadminrole"/><label for="editadminrole"><span><span></span></span>Admin - all of the above, Manage user accounts</label>
+          </div>
+        </div>
+        <br />
+        <label for="edituserrating" style="margin-right: 15px">Count Rating: 
+          <select name="edituserrating" id="edituserrating" style="margin-left: 10px">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="7">7</option>
+            <option value="8">8</option>
+            <option value="9">9</option>
+            <option value="10">10</option>
+          </select>
+        </label>
+      </fieldset>
+      <br />
+      <div id="dlgbuttons">
+        <button onclick="cancelEditAccountDialog()">Cancel</button>
+        <button id="editsavebtn" onclick="saveEditAccountInputs()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- placeholder for createAccount dialog -->
+<div class="dialog-overlay" id="dialog-createaccount">
+  <div class="dialog-wrapper">
+    <div class="dialog-content" style="width: 600px">
+      <h2>Create New Account</h2>
+      <br />
+      <div id="createaccount-errorfield">Enter new account details</div>
+      <fieldset>
+        <label for="firstname">First Name
+          <input type="text" name="firstname" id="firstname" placeholder="Name" required />
+        </label>
+        <label for="lastname">Last Name
+          <input type="text" name="lastname" id="lastname" placeholder="Name" required />
+        </label>
+        <label for="email">Email address
+          <input type="text" name="email" id="email" placeholder="Registered email address" pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,4}" required />
+        </label>
+        <br />
+        <label>User Role</label>
+        <div id="radiobtns">
+          <div>
+            <input name="role" type="radio" id="userrole" checked="checked"/><label for="userrole"><span><span></span></span>User - count videos</label>
+          </div>
+          <div>
+            <input name="role" type="radio" id="qcrole"/><label for="qcrole"><span><span></span></span>QC User - count videos, QC counts</label>
+          </div>
+          <div>
+            <input name="role" type="radio" id="designerrole"/><label for="designerrole"><span><span></span></span>Designer - count videos, QC counts, Design layouts </label>
+          </div>
+          <div>
+            <input name="role" type="radio" id="projectmanagerrole"/><label for="projectmanagerrole"><span><span></span></span>Project Manager - all of the above, Manage Jobs/Jobsites</label>
+            <div style="margin-bottom:5px; margin-left: 25px; font-size:0.8em">(Process tubedata, upload videos, gen reports, set/view jobsite status)</div>
+          </div>
+          <div>
+            <input name="role" type="radio" id="adminrole"/><label for="adminrole"><span><span></span></span>Admin - all of the above, Manage user accounts</label>
+          </div>
+        </div>
+        <br />
+        <label for="userrating" style="margin-right: 15px">Count Rating: 
+          <select name="userrating" id="userrating" style="margin-left: 10px">
+            <option value="1" selected="selected">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="7">7</option>
+            <option value="8">8</option>
+            <option value="9">9</option>
+            <option value="10">10</option>
+          </select>
+        </label>
+      </fieldset>
+      <br />
+      <div id="dlgbuttons">
+        <button onclick="cancelNewAccountDialog()">Cancel</button>
+        <button onclick="validNewAccountInputs()">Create</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- placeholder for DeactivateAccount dialog -->
+<div class="dialog-overlay" id="dialog-deactivateaccount">
+  <div class="dialog-wrapper">
+    <div class="dialog-content">
+      <h2>Deactivate Account</h2>
+      <br />
+      <fieldset>
+        <label>Are you sure you want to deactivate this user account?</label>
+      </fieldset>
+      <br />
+      <div id="dlgbuttons">
+        <button onclick="cancelDeactivateAccount()">Cancel</button>
+        <button onclick="DeactivateAccount()">Deactivate</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- placeholder for ReactivateAccount dialog -->
+<div class="dialog-overlay" id="dialog-reactivateaccount">
+  <div class="dialog-wrapper">
+    <div class="dialog-content">
+      <h2>Reactivate Account</h2>
+      <br />
+      <fieldset>
+        <label>Are you sure you want to Reactivate this user account?</label>
+      </fieldset>
+      <br />
+      <div id="dlgbuttons">
+        <button onclick="cancelReactivateAccount()">Cancel</button>
+        <button onclick="ReactivateAccount()">Reactivate</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- AccountManager screen -->
+<div>
+  <div id="idaxtitle"><img  style="float: right" src="images/IDAX_2-blue-35w.png" width="35"/>Account Management</div>
+  <button class="hdrbutton" id="doneaccountbtn" onclick="closeAccountManagement()">Done</button>
+  <button class="hdrbutton" style="float: left" onclick="createNewAccount()">Create Account</button>
+  <button class="hdrbutton" id="editaccountbtn" style="float: left" onclick="openEditAccount()">Edit Account</button>
+  <button class="hdrbutton" id="deactivatebtn" style="float: left" onclick="openDeactivateAccount()">Deactivate</button>
+  <button class="hdrbutton" id="reactivatebtn" style="float: left" onclick="openReactivateAccount()">Reactivate</button>
+  <br />
+  <div id="activeaccts">User Accounts</div>
+  <table id="acctstable">
+    <tr>
+      <td>
+        <table id="acctstablehead">
+          <col id="col-username"/>
+          <col id="col-useremail"/>
+          <col id="col-role"/>
+          <col id="col-rating"/>
+          <col id="col-status"/>
+          <col id="col-lastlogin"/>
+          <col id="col-created"/>
+          <col id="col-registered"/>
+          <col id="col-endspace"/>
+          <tr>
+            <td id="sort-name">Name</td>
+            <td id="sort-email">Email</td>
+            <td id="sort-role">Role</td>
+            <td id="sort-rating">Rating</td>
+            <td id="sort-status">Status</td>
+            <td id="sort-lastlogin">Last Login</td>
+            <td id="sort-created">Created</td>
+            <td id="sort-registered">Registered</td>
+            <td></td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <div id="acctstablediv">
+          <table id="acctstablerows">
+          <col id="col-username"/>
+          <col id="col-useremail"/>
+          <col id="col-role"/>
+          <col id="col-rating"/>
+          <col id="col-status"/>
+          <col id="col-lastlogin"/>
+          <col id="col-created"/>
+          <col id="col-registered"/>
+          <col id="col-endspace"/>
+          </table>
+        </div>
+      </td>
+    </tr>
+  </table>
+</div>

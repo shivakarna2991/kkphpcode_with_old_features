@@ -1,0 +1,357 @@
+/*
+*    processdata layout
+*/
+div.jobsites-content {
+  position: absolute;
+  height: 735px;
+  width: 1007px;
+  top: 75px;
+  left: 50%;
+  margin-left: -503px;
+  text-align: left;
+  background-color: rgb(255,255,255);
+  border-radius: 2px;
+}
+
+#videojobsitesidentifiername {
+  color: #0453ff;
+}
+
+#videojobsites {
+  margin-top: 40px;
+  margin-left: 20px; 
+}
+/* 
+*    Jobsites tables
+*/
+#jobsiteedittable {
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+#col-label {
+  width: 120px;
+}
+#col-input {
+  width: 350px;
+}
+#jobsitelegrows {
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+#jobsitelegrows label {
+  color: rgb(0,0,0);
+  display: block;
+  font-family: 'Varela Round', sans-serif;
+  font-size: 0.75em;
+  text-align: right;
+  margin-right: 10px;
+}
+#cameracorner tr td input[type="text"], 
+textarea {
+  background-color: rgb(255,255,255);
+  border: 1px solid rgb( 186, 186, 186 );
+  border-radius: 1px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
+  display: block;
+  font-size: .75em;
+  margin: 3px 0 3px 0;
+  padding: .55em .55em;    
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 1);
+  transition: all 400ms ease;
+  width: 218px;
+}
+#jobsitelegrows tr td input[type="text"],
+textarea {
+  background-color: rgb(255,255,255);
+  border: 1px solid rgb( 186, 186, 186 );
+  border-radius: 1px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
+  display: block;
+  font-size: .75em;
+  margin: 3px 0 3px 0;
+  padding: .55em .55em;    
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 1);
+  transition: all 400ms ease;
+  width: 320px;
+}
+    
+#cameracorner tr td input[type="text"]:focus,
+#jobsitelegrows tr td input[type="text"]:focus,
+textarea:focus,
+select:focus { 
+  border-color: #4195fc;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 8px #4195fc;
+}
+
+#cameracorner tr td input[type="text"]:invalid:focus, 
+#jobsitelegrows tr td input[type="text"]:invalid:focus,
+textarea:invalid:focus,
+select:invalid:focus { 
+  border-color: rgb(248,66,66);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 8px rgb(248,66,66);
+}
+
+
+#videojobsitestable {
+  width: 967px;
+  height: 200px;
+  border-collapse: collapse;
+  border-style: solid; 
+  border-width: 1px;
+  border-color: #666;
+  table-layout: fixed;
+  margin-left: 20px;
+  text-align: center;
+  font-family:sans;
+}
+#videojobsitestable td {
+  height: 25px;
+}
+#videojobsitestable td:nth-of-type(2) {
+  text-align: left;
+  width: 325px;
+}
+#sort-status {
+  width: 100px;
+}
+#sort-updated {
+  width: 100px;
+}
+#sort-priority {
+  width: 100px;
+}
+#sort-numvideos {
+  width: 100px;
+}
+#sort-numlayouts {
+  width: 100px;
+}
+#col-sitecode {
+  width: 100px;
+}
+#col-location {
+  width: 300px;
+}
+
+#col-status {
+  width:100px;
+}
+#col-updated {
+  width: 100px;
+}
+#col-priority {
+  width: 100px;
+}
+#col-numdevices {
+  width: 100px;
+}
+#col-numvideos {
+  width: 100px;
+}
+#col-numlayouts {
+  width: 100px;
+}
+#col-endspace {
+  width: 25px;
+}
+#videojobsitestablehead {
+  background:#666;
+  color:#fff;
+  width: 965px;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+#videojobsitestablediv {
+  width: 965px;
+  height: 250px;
+  overflow: auto;
+}
+#videojobsitestablerows {
+  vertical-align: middle;
+  width: 940px;
+  color: #444444;
+  font-size: .85em;
+}
+#videojobsitestablerows tr:nth-child(2n+1) {
+  background: #f4f4f4;
+}
+#videojobsitestablerows tbody tr:hover {
+  background: #cccccc;
+}
+
+/* 
+*    videolist table
+*/
+#videotable {
+  width: 967px;
+  height: 200px;
+  border-collapse: collapse;
+  border-style: solid; 
+  border-width: 1px;
+  border-color: #666;
+  table-layout: fixed;
+  margin-left: 20px;
+  text-align: center;
+  font-family:sans;
+}
+#videotablerows td:nth-of-type(1) {
+  padding-left: 5px;
+  text-align: left;
+}
+#videotablehead td:nth-of-type(1) {
+  padding-left: 5px;
+  text-align: left;
+}
+#videotable tr {
+  height: 25px;
+}
+#colvideotablevlname {
+  text-align: left;
+  width: 200px;
+}
+#col-vlsize {
+  width: 100px;
+}
+#col-vladded {
+  width: 150px;
+}
+#col-vlstatus {
+  width: 100px;
+}
+#col-vluploadtime {
+  width: 150px;
+}
+#col-vlnumlayouts {
+  width: 75px;
+}
+#videotablehead {
+  background:#666;
+  color:#fff;
+  width: 965px;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+#videotablediv {
+  width: 965px;
+  height: 250px;
+  overflow: auto;
+}
+#videotablerows {
+  vertical-align: middle;
+  width: 940px;
+  color: #444444;
+  font-size: .85em;
+}
+#videotablerows tr:nth-child(2n+1) {
+  background: #f4f4f4;
+}
+#videotablerows tbody tr:hover {
+  background: #cccccc;
+}
+
+/* progress bar */
+.ui-progressbar {
+  position: relative;
+}
+.progress-label {
+  position: absolute;
+  left: 50%;
+  top: 4px;
+  font-weight: bold;
+  text-shadow: 1px 1px 0 #fff;
+}
+
+a:link {
+    text-decoration: underline;
+}
+
+a:visited {
+    text-decoration: underline;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+a:active {
+    text-decoration: underline;
+}
+
+#jobsite-info-table {
+    width: 100%;
+    height: 510px;
+    background-color: white;
+    float: left;
+}
+.jobsiteinfo-cell {
+    width: 50%;
+    height: 500px;
+    background-color: white;
+}
+
+/*
+*   devicestatustable
+*/
+#devicestatustable, #videodetailstable, #videodetailsheader, #videodetailsbuttons {
+  width: 463px;
+  border-collapse: collapse;
+  border-style: none; 
+  border-width: 1px;
+  border-color: #666;
+  table-layout: fixed;
+  margin-left: 20px;
+  text-align: center;
+}
+#videoheaderrow, #videobuttonrow {
+  vertical-align: left;
+  width: 440px;
+  color: #444444;
+}
+#capturescheduletablerows, #capturedvideostablerows {
+  text-align: left;
+  vertical-align: top;
+  width: 440px;
+  font-size: .85em;
+}
+.capturetablediv {
+  border-style: solid; 
+  border-width: 1px;
+  border-color: #000000;
+  width: 440px;
+  height: 145px;
+  overflow: auto;
+}
+
+/* 
+*    Capture schedule table
+*/
+#capturescheduletablerows td {
+  padding-left: 10px;
+}
+#capturescheduletablerows tr {
+  height: 30px;
+}
+#capturescheduletablerows tr:nth-child(2n+1) {
+  background: #f4f4f4;
+}
+
+/* 
+*    Captured videos table
+*/
+#capturedvideostablerows tr:nth-child(2n+1) {
+  background: #f4f4f4;
+}
+#capturedvideostablerows td {
+  padding-left: 10px;
+}
+#capturedvideostablerows tr {
+  height: 30px;
+}

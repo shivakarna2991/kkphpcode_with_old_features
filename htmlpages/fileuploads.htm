@@ -1,0 +1,154 @@
+<link href="css/fileuploads.css" rel="stylesheet" type="text/css" />
+
+<script>
+    /* initialize this form
+    */
+    function initFileUploads()
+    {
+        fileUploadsInitialize();
+
+        // Register for file upload notifications
+        fileUploadAddEventListener(
+                function(evt)
+                {
+                    var tableRows = $("#fileuploads-tablerows");
+
+                    switch (evt.type)
+                    {
+                        case "fileUploadJobAdded":
+                            addFileUploadRow(evt.fileUploadJob);
+                            break;
+
+                        case "fileUploadJobUpdated":
+                            updateFileUploadRow(evt.fileUploadJob);
+                            break;
+
+                        case "fileUploadJobCompleted":
+                            removeFileUploadRow(evt.fileUploadJob);
+                            break;
+
+                        default:
+                            break;
+                    }
+                }
+                );
+    }
+
+    function addFileUploadRow(fileUploadJob)
+    {
+        var table = document.getElementById("fileuploads-tablerows");
+        var isVisible = table.rows.length > 0;
+
+        var row =  table.insertRow(0);
+
+        // populate each column in the file uploads table
+
+        // Name
+        var cell = row.insertCell(0);
+        cell.innerHTML = fileUploadJob.name;
+        cell.setAttribute("id", fileUploadJob.id);
+
+        // Upload Size in second column
+        cell = row.insertCell(1);
+        var uploadSize = (fileUploadJob.bytestotransfer / 1048576).toFixed(2);
+        cell.innerHTML = uploadSize + " MB";
+        
+        // add progressbar divs to 3rd column
+        cell = row.insertCell(2);
+        cell.innerHTML = "<div style='width:0%; background: rgb(128, 177, 133); overflow: visible;'><div style='width:535px;'>0%</div></div>";
+
+        // if fileuploads is not visible, show it
+        if (!isVisible) {
+            $(".fileuploads-content").animate({width:'toggle'},350);
+        }
+    }
+
+    function updateFileUploadRow(fileUploadJob)
+    {
+        var table = document.getElementById("fileuploads-tablerows");
+
+        for (var i = 0; i<table.rows.length; i++)
+        {
+            var row = table.rows[i];
+
+            var cell = row.cells[0];
+            var cellattr = cell.getAttribute("id");
+            var uploadJobId = cellattr[0];
+
+            if (uploadJobId == fileUploadJob.id)
+            {
+            
+                // Upload Size in second column
+                cell = row.cells[1];
+                var uploadSize = (fileUploadJob.bytestotransfer / 1048576).toFixed(2);
+                cell.innerHTML = uploadSize + " MB";
+
+                cell = row.cells[2];
+                var percentComplete = (fileUploadJob.progress * 100).toFixed(2);
+                cell.innerHTML = "<div style='width:" + percentComplete + "%; background: rgb(128, 177, 133); overflow: visible;'><div style='width:535px;'>" + percentComplete + "%</div></div>"
+                break;
+            }
+        }
+    }
+
+    function removeFileUploadRow(fileUploadJob)
+    {
+        var table = document.getElementById("fileuploads-tablerows");
+
+        for (var i = 0; i<table.rows.length; i++)
+        {
+            var row = table.rows[i];
+
+            var cell = row.cells[0];
+            var cellattr = cell.getAttribute("id");
+            var uploadJobId = cellattr[0];
+
+            if (uploadJobId == fileUploadJob.id)
+            {
+                table.deleteRow(row.rowIndex);
+
+                break;
+            }
+        }
+
+        if (table.rows.length === 0)
+        {
+            $(".fileuploads-content").fadeToggle("fast");
+        }
+    }
+
+</script>
+
+<!-- fileuploads screen -->
+<div id="fileuploads">
+  <div id="fileuploadstitle">File uploads progress...</div>
+    <table id="fileuploads-table">
+        <tr>
+        <td>
+            <table id="fileuploads-tablehead">
+            <col id="fileuploads-col-name"/>
+            <col id="fileuploads-col-size"/>
+            <col id="fileuploads-col-progress"/>
+            <col id="fileuploads-col-endspace"/>
+            <tr>
+                <td id="fileuploads-sort-name">Name</td>
+                <td id="fileuploads-sort-size">Size</td>
+                <td id="fileuploads-sort-progress">Progress</td>
+                <td></td>
+            </tr>
+            </table>
+        </td>
+        </tr>
+        <tr>
+        <td>
+            <div id="fileuploads-tablediv">
+            <table id="fileuploads-tablerows">
+            <col id="fileuploads-col-name"/>
+            <col id="fileuploads-col-size"/>
+            <col id="fileuploads-col-progress"/>
+            </table>
+            </div>
+        </td>
+        </tr>
+    </table>
+</div>

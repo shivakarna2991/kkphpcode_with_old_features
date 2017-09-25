@@ -1,0 +1,4 @@
+VideoStartTime: 04:30:00 06/13/2017
+Direction,VideoPos,VideoSpeed,CountType,ObjectType,CountedTime
+VideoStartTime: 10:00:00 06/13/2017
+Direction,VideoPos,VideoSpeed,CountType,ObjectType,CountedTime
