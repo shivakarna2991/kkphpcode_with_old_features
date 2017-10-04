@@ -283,9 +283,7 @@ class AWSFileManager {
 		$this->file['full_path'] = $this->root . $this->destination . $name;
         	$this->file['path'] = $this->destination . $name;
                 if(copy($sourceFilename, $this->file['path'])){
-                    $withoutExt = preg_replace('/\\.[^.\\s]{3,4}$/', '', $name);
-                    echo 'copied'.$this->root.$withoutExt;
-                    @rmdir($this->root.$withoutExt);
+                    //echo 'copied';
                     $result = TRUE;
                 }else{
                     //echo 'error';

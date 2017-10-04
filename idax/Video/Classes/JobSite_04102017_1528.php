@@ -1662,8 +1662,7 @@
 				if ($result)
 				{
 					// Update the video file info
-					//$jobSiteVideoFileRow->setStatus("prepared");
-					$jobSiteVideoFileRow->setStatus("ready");
+					$jobSiteVideoFileRow->setStatus("prepared");
 				}
 				else
 				{
@@ -1678,20 +1677,20 @@
 			}
 
 			// Delete any files we created.
-			$files = glob("$dstDirectory/*");
+			/*$files = glob("$dstDirectory/*");
 
 			foreach ($files as &$files)
 			{
-				//unlink($files);
+				unlink($files);
 			}
 
-			//@rmdir($dstDirectory);
+			@rmdir($dstDirectory);
 
 			// It's on us to remove the source files, too.
 			foreach ($videoFiles as &$videoFile)
 			{
 				unlink($videoFile);
-			}
+			}*/
 
 			DBG_RETURN_BOOL(DBGZ_VIDEO_JOBSITE, __METHOD__, $result);
 			return $result;
